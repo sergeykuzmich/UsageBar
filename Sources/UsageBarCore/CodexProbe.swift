@@ -92,7 +92,7 @@ public enum CodexUsageParser {
                 guard let window else { return nil }
                 return UsageWindow(
                     id: name,
-                    title: usageWindowTitle(windowMinutes: window.windowDurationMins),
+                    windowMinutes: window.windowDurationMins,
                     usedPercent: window.usedPercent,
                     resetsAt: window.resetsAt.map { Date(timeIntervalSince1970: $0) }
                 )

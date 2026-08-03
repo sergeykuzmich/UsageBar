@@ -166,6 +166,8 @@ private struct FooterView: View {
                 }
                 .pickerStyle(.inline)
                 Divider()
+                Toggle("Show Both Windows", isOn: $store.showsBothWindows)
+                    .disabled(store.menuBarSource == .highest)
                 Toggle("Open at Login", isOn: loginItemBinding)
                 Divider()
                 Button("Quit UsageBar") { NSApplication.shared.terminate(nil) }

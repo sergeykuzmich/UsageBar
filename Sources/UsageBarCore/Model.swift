@@ -24,12 +24,16 @@ public enum ProviderKind: String, Sendable, CaseIterable, Identifiable {
 public struct UsageWindow: Sendable, Equatable, Identifiable {
     public let id: String
     public let title: String
+    /// Menu bar form, e.g. `5h`. Nil when the provider did not say how long the
+    /// window runs, in which case there is nothing truthful to abbreviate.
+    public let shortTitle: String?
     public let usedPercent: Double
     public let resetsAt: Date?
 
-    public init(id: String, title: String, usedPercent: Double, resetsAt: Date?) {
+    public init(id: String, windowMinutes: Int?, usedPercent: Double, resetsAt: Date?) {
         self.id = id
-        self.title = title
+        self.title = usageWindowTitle(windowMinutes: windowMinutes)
+        self.shortTitle = usageWindowShortTitle(windowMinutes: windowMinutes)
         self.usedPercent = usedPercent
         self.resetsAt = resetsAt
     }
@@ -86,6 +90,13 @@ public func usageWindowTitle(windowMinutes: Int?) -> String {
     if minutes % 1440 == 0 { return "\(minutes / 1440)-day" }
     if minutes % 60 == 0 { return "\(minutes / 60)-hour" }
     return "\(minutes)-minute"
+}
+
+public func usageWindowShortTitle(windowMinutes: Int?) -> String? {
+    guard let minutes = windowMinutes, minutes > 0 else { return nil }
+    if minutes % 1440 == 0 { return "\(minutes / 1440)d" }
+    if minutes % 60 == 0 { return "\(minutes / 60)h" }
+    return "\(minutes)m"
 }
 
 enum ISO8601 {

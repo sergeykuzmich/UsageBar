@@ -20,12 +20,12 @@ enum PreviewRender {
         let warm = UsageStore()
         warm.apply([
             ProviderStatus(kind: .claude, outcome: .report(ProviderReport(plan: "max", windows: [
-                UsageWindow(id: "a", title: "5-hour", usedPercent: 72, resetsAt: Date().addingTimeInterval(3600 * 2 + 600)),
-                UsageWindow(id: "b", title: "Weekly", usedPercent: 91, resetsAt: Date().addingTimeInterval(86400 * 3)),
+                UsageWindow(id: "a", windowMinutes: 300, usedPercent: 72, resetsAt: Date().addingTimeInterval(3600 * 2 + 600)),
+                UsageWindow(id: "b", windowMinutes: 10080, usedPercent: 91, resetsAt: Date().addingTimeInterval(86400 * 3)),
             ]))),
             ProviderStatus(kind: .codex, outcome: .report(ProviderReport(plan: "pro", windows: [
-                UsageWindow(id: "c", title: "5-hour", usedPercent: 12, resetsAt: Date().addingTimeInterval(1800)),
-                UsageWindow(id: "d", title: "Weekly", usedPercent: 44, resetsAt: Date().addingTimeInterval(86400 * 5)),
+                UsageWindow(id: "c", windowMinutes: 300, usedPercent: 12, resetsAt: Date().addingTimeInterval(1800)),
+                UsageWindow(id: "d", windowMinutes: 10080, usedPercent: 44, resetsAt: Date().addingTimeInterval(86400 * 5)),
             ]))),
         ])
 
@@ -38,25 +38,33 @@ enum PreviewRender {
                 )
             }
         }
-        let bySource: [(String, Double?)] = MenuBarSource.allCases.map { source in
-            live.menuBarSource = source
-            return (source.title, live.headlinePercent)
-        }
-        live.menuBarSource = .highest
-
+        let shapes: [(String, MenuBarReadout)] = [
+            ("single", live.menuBarReadout),
+            ("both", .windows(claudeWindows(of: live))),
+            ("empty", .empty),
+        ]
         snapshot(
-            HStack(spacing: 20) {
-                ForEach(bySource, id: \.0) { title, percent in
+            HStack(spacing: 22) {
+                ForEach(shapes, id: \.0) { name, readout in
                     VStack(spacing: 4) {
-                        MenuBarLabel(percent: percent, isRefreshing: false)
-                        Text(title).font(.system(size: 9)).foregroundStyle(.secondary)
+                        MenuBarLabel(readout: readout, isRefreshing: false)
+                            .fixedSize()
+                            .padding(.horizontal, 6).frame(height: 24)
+                        Text(name).font(.system(size: 9)).foregroundStyle(Palette.mutedInk)
                     }
                 }
-            }.padding(8),
+            }.padding(10),
             dark: false,
             to: "\(outputDirectory)/label.png"
         )
         NSApplication.shared.terminate(nil)
+    }
+
+    private static func claudeWindows(of store: UsageStore) -> [MenuBarReadout.Entry] {
+        let windows = store.available.first { $0.kind == .claude }?.report?.windows ?? []
+        return windows.prefix(2).map {
+            MenuBarReadout.Entry(id: $0.id, shortTitle: $0.shortTitle, usedPercent: $0.usedPercent)
+        }
     }
 
     /// Draws through AppKit rather than `ImageRenderer` so that real controls (`Menu`,

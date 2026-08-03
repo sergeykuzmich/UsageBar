@@ -152,6 +152,15 @@ struct PresentationTests {
     @Test func fallsBackWhenTheWindowLengthIsUnknown() {
         #expect(usageWindowTitle(windowMinutes: nil) == "Usage")
         #expect(usageWindowTitle(windowMinutes: 0) == "Usage")
+        #expect(usageWindowShortTitle(windowMinutes: nil) == nil)
+        #expect(usageWindowShortTitle(windowMinutes: 0) == nil)
+    }
+
+    @Test(arguments: [
+        (300, "5h"), (10080, "7d"), (1440, "1d"), (43200, "30d"), (60, "1h"), (90, "90m"),
+    ])
+    func abbreviatesWindowsForTheMenuBar(minutes: Int, expected: String) {
+        #expect(usageWindowShortTitle(windowMinutes: minutes) == expected)
     }
 
     @Test func formatsTimeUntilReset() {
@@ -181,11 +190,11 @@ struct UsageStoreTests {
 
     static let bothProviders: [ProviderStatus] = [
         ProviderStatus(kind: .claude, outcome: .report(ProviderReport(plan: "max", windows: [
-            UsageWindow(id: "five_hour", title: "5-hour", usedPercent: 6, resetsAt: nil),
-            UsageWindow(id: "seven_day", title: "Weekly", usedPercent: 16, resetsAt: nil),
+            UsageWindow(id: "five_hour", windowMinutes: 300, usedPercent: 6, resetsAt: nil),
+            UsageWindow(id: "seven_day", windowMinutes: 10080, usedPercent: 16, resetsAt: nil),
         ]))),
         ProviderStatus(kind: .codex, outcome: .report(ProviderReport(plan: "free", windows: [
-            UsageWindow(id: "primary", title: "Monthly", usedPercent: 18, resetsAt: nil)
+            UsageWindow(id: "primary", windowMinutes: 43200, usedPercent: 18, resetsAt: nil)
         ]))),
     ]
 
@@ -202,6 +211,80 @@ struct UsageStoreTests {
 
         store.menuBarSource = .codex
         #expect(store.headlinePercent == 18)
+    }
+
+    @MainActor
+    @Test func bothWindowsRendersOneRowPerWindow() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply(Self.bothProviders)
+        store.menuBarSource = .claude
+        store.showsBothWindows = true
+
+        #expect(
+            store.menuBarReadout == .windows([
+                MenuBarReadout.Entry(id: "five_hour", shortTitle: "5h", usedPercent: 6),
+                MenuBarReadout.Entry(id: "seven_day", shortTitle: "7d", usedPercent: 16),
+            ])
+        )
+        #expect(store.headlinePercent == 16)
+    }
+
+    /// "5h" and "7d" would be lying when the number could have come from either CLI.
+    @MainActor
+    @Test func bothWindowsFallsBackToOneNumberWhenNoProviderIsPinned() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply(Self.bothProviders)
+        store.showsBothWindows = true
+
+        #expect(store.menuBarSource == .highest)
+        #expect(store.menuBarReadout == .single(18))
+    }
+
+    @MainActor
+    @Test func bothWindowsFallsBackWhenTheProviderHasOnlyOne() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply(Self.bothProviders)
+        store.menuBarSource = .codex
+        store.showsBothWindows = true
+
+        #expect(store.menuBarReadout == .single(18))
+    }
+
+    @MainActor
+    @Test func bothWindowsSurvivesARestart() {
+        let defaults = Self.scratchDefaults(#function)
+        let first = UsageStore(defaults: defaults)
+        first.menuBarSource = .claude
+        first.showsBothWindows = true
+
+        let relaunched = UsageStore(defaults: defaults)
+        relaunched.apply(Self.bothProviders)
+
+        #expect(relaunched.showsBothWindows)
+        #expect(relaunched.menuBarReadout == .windows([
+            MenuBarReadout.Entry(id: "five_hour", shortTitle: "5h", usedPercent: 6),
+            MenuBarReadout.Entry(id: "seven_day", shortTitle: "7d", usedPercent: 16),
+        ]))
+    }
+
+    @MainActor
+    @Test func defaultsToASingleNumber() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply(Self.bothProviders)
+
+        #expect(store.showsBothWindows == false)
+        #expect(store.menuBarReadout == .single(18))
+    }
+
+    @MainActor
+    @Test func readoutIsEmptyWhenNothingAnswered() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply([
+            ProviderStatus(kind: .claude, outcome: .unavailable("not installed")),
+            ProviderStatus(kind: .codex, outcome: .unavailable("not installed")),
+        ])
+
+        #expect(store.menuBarReadout == .empty)
     }
 
     @MainActor
@@ -247,8 +330,8 @@ struct UsageStoreTests {
                     ProviderReport(
                         plan: "max",
                         windows: [
-                            UsageWindow(id: "five_hour", title: "5-hour", usedPercent: 4, resetsAt: nil),
-                            UsageWindow(id: "seven_day", title: "Weekly", usedPercent: 16, resetsAt: nil),
+                            UsageWindow(id: "five_hour", windowMinutes: 300, usedPercent: 4, resetsAt: nil),
+                            UsageWindow(id: "seven_day", windowMinutes: 10080, usedPercent: 16, resetsAt: nil),
                         ]
                     )
                 )

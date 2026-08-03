@@ -158,12 +158,14 @@ public enum ClaudeUsageParser {
         guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
             throw ClaudeProbeError(message: "Could not read the Claude usage response.")
         }
-        return [("five_hour", "5-hour", payload.five_hour), ("seven_day", "Weekly", payload.seven_day)]
-            .compactMap { id, title, window in
+        // Named by duration like the Codex windows, so both providers label the same
+        // way and the menu bar abbreviations come from one place.
+        return [("five_hour", 300, payload.five_hour), ("seven_day", 10080, payload.seven_day)]
+            .compactMap { id, minutes, window in
                 guard let window, let utilization = window.utilization else { return nil }
                 return UsageWindow(
                     id: id,
-                    title: title,
+                    windowMinutes: minutes,
                     usedPercent: utilization,
                     resetsAt: window.resets_at.flatMap(ISO8601.date(from:))
                 )

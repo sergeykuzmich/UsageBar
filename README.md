@@ -28,7 +28,7 @@ Both CLIs are probed independently. Whichever ones answer get a section; if neit
 
 Usage refreshes every 5 minutes and whenever you press refresh.
 
-The menu bar itself has room for one number. Under **⋯ → Show in Menu Bar**, pick whether that number tracks Claude Code, Codex, or whichever of the two is highest. The choice is remembered across restarts.
+Under **⋯ → Show in Menu Bar**, pick whether the menu bar number tracks Claude Code, Codex, or whichever of the two is highest. With one provider pinned, **Show Both Windows** stacks its two readings — `5h 9%` over `7d 17%` — into the same width a single number takes. Both choices are remembered across restarts.
 
 ## How it reads the numbers
 

@@ -26,3 +26,31 @@ public enum MenuBarSource: String, Sendable, CaseIterable, Identifiable {
         }
     }
 }
+
+/// What the menu bar draws. `windows` only happens when a single provider is pinned,
+/// because "5h" and "7d" mean nothing when the number could come from either CLI.
+public enum MenuBarReadout: Sendable, Equatable {
+    case empty
+    case single(Double)
+    case windows([Entry])
+
+    public struct Entry: Sendable, Equatable, Identifiable {
+        public let id: String
+        public let shortTitle: String?
+        public let usedPercent: Double
+
+        public init(id: String, shortTitle: String?, usedPercent: Double) {
+            self.id = id
+            self.shortTitle = shortTitle
+            self.usedPercent = usedPercent
+        }
+    }
+
+    public var highestPercent: Double? {
+        switch self {
+        case .empty: nil
+        case .single(let percent): percent
+        case .windows(let entries): entries.map(\.usedPercent).max()
+        }
+    }
+}

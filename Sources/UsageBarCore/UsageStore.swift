@@ -8,8 +8,14 @@ public final class UsageStore {
     public private(set) var lastRefreshed: Date?
     public private(set) var isRefreshing = false
 
+    public static let showsBothWindowsKey = "menuBarShowsBothWindows"
+
     public var menuBarSource: MenuBarSource {
         didSet { defaults.set(menuBarSource.rawValue, forKey: MenuBarSource.defaultsKey) }
+    }
+
+    public var showsBothWindows: Bool {
+        didSet { defaults.set(showsBothWindows, forKey: Self.showsBothWindowsKey) }
     }
 
     private let defaults: UserDefaults
@@ -20,6 +26,7 @@ public final class UsageStore {
         self.defaults = defaults
         self.menuBarSource = defaults.string(forKey: MenuBarSource.defaultsKey)
             .flatMap(MenuBarSource.init(rawValue:)) ?? .highest
+        self.showsBothWindows = defaults.bool(forKey: Self.showsBothWindowsKey)
     }
 
     public var available: [ProviderStatus] {
@@ -30,11 +37,25 @@ public final class UsageStore {
         statuses.filter { $0.report == nil }
     }
 
+    public var menuBarReadout: MenuBarReadout {
+        let scoped = menuBarSource.providerKind.map { kind in available.filter { $0.kind == kind } } ?? available
+        let windows = scoped.flatMap { $0.report?.windows ?? [] }
+        guard let highest = windows.map(\.usedPercent).max() else { return .empty }
+
+        guard showsBothWindows, menuBarSource.providerKind != nil, windows.count > 1 else {
+            return .single(highest)
+        }
+        return .windows(
+            windows.prefix(2).map {
+                MenuBarReadout.Entry(id: $0.id, shortTitle: $0.shortTitle, usedPercent: $0.usedPercent)
+            }
+        )
+    }
+
     /// The worst window of whichever providers `menuBarSource` covers. Nil when the
     /// chosen provider did not answer, which leaves the menu bar showing an empty ring.
     public var headlinePercent: Double? {
-        let scoped = menuBarSource.providerKind.map { kind in available.filter { $0.kind == kind } } ?? available
-        return scoped.flatMap { $0.report?.windows ?? [] }.map(\.usedPercent).max()
+        menuBarReadout.highestPercent
     }
 
     public func refresh() {

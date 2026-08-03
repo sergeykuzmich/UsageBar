@@ -10,7 +10,7 @@ struct UsageBarApp: App {
         MenuBarExtra {
             PopoverView(store: store)
         } label: {
-            MenuBarLabel(percent: store.headlinePercent, isRefreshing: store.isRefreshing)
+            MenuBarLabel(readout: store.menuBarReadout, isRefreshing: store.isRefreshing)
         }
         .menuBarExtraStyle(.window)
     }
