@@ -11,13 +11,13 @@ enum PreviewRender {
             try? await Task.sleep(for: .milliseconds(200))
         }
 
-        let empty = UsageStore()
+        let empty = UsageStore(defaults: scratchDefaults("empty"))
         empty.apply([
             ProviderStatus(kind: .claude, outcome: .unavailable("`claude` was not found. Install it, or make sure it is on your login shell's PATH.")),
             ProviderStatus(kind: .codex, outcome: .unavailable("`codex` was not found. Install it, or make sure it is on your login shell's PATH.")),
         ])
 
-        let warm = UsageStore()
+        let warm = UsageStore(defaults: scratchDefaults("warm"))
         warm.apply([
             ProviderStatus(kind: .claude, outcome: .report(ProviderReport(plan: "max", windows: [
                 UsageWindow(id: "a", windowMinutes: 300, usedPercent: 72, resetsAt: Date().addingTimeInterval(3600 * 2 + 600)),
@@ -38,10 +38,18 @@ enum PreviewRender {
                 )
             }
         }
-        let claude = claudeWindows(of: live)
+        for status in live.statuses {
+            print("LIVE \(status.kind.rawValue): \(status.report.map { "\($0.windows.map(\.usedPercent))" } ?? status.unavailableReason ?? "?") stale=\(status.stale?.reason ?? "-")")
+        }
+        fflush(stdout)
+
         let shapes: [(String, MenuBarReadout)] = [
-            ("single", .single(claude.map(\.usedPercent).max() ?? 0)),
-            ("both", .windows(claude)),
+            ("single", .single(17)),
+            ("both", .windows([
+                MenuBarReadout.Entry(id: "a", initial: "h", usedPercent: 11),
+                MenuBarReadout.Entry(id: "b", initial: "w", usedPercent: 24),
+            ])),
+            ("one window", .windows([MenuBarReadout.Entry(id: "a", initial: "m", usedPercent: 24)])),
             ("exhausted", .windows([
                 MenuBarReadout.Entry(id: "a", initial: "h", usedPercent: 100),
                 MenuBarReadout.Entry(id: "b", initial: "w", usedPercent: 63),
@@ -90,6 +98,15 @@ enum PreviewRender {
             let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
             try? png.write(to: URL(fileURLWithPath: path))
         }
+    }
+
+    /// Fixture stores get their own domain: sharing `.standard` wrote fake percentages
+    /// into the real app's cached reading.
+    private static func scratchDefaults(_ name: String) -> UserDefaults {
+        let suite = "usagebar.preview.\(name)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
     }
 
     private static func claudeWindows(of store: UsageStore) -> [MenuBarReadout.Entry] {

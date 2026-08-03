@@ -21,7 +21,7 @@ public enum ProviderKind: String, Sendable, CaseIterable, Identifiable {
     }
 }
 
-public struct UsageWindow: Sendable, Equatable, Identifiable {
+public struct UsageWindow: Sendable, Equatable, Identifiable, Codable {
     public let id: String
     public let windowMinutes: Int?
     public let title: String
@@ -38,9 +38,33 @@ public struct UsageWindow: Sendable, Equatable, Identifiable {
         self.usedPercent = usedPercent
         self.resetsAt = resetsAt
     }
+
+    // Only the duration is stored; the titles are derived so a cached reading can never
+    // disagree with a freshly parsed one.
+    private enum CodingKeys: String, CodingKey {
+        case id, windowMinutes, usedPercent, resetsAt
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            windowMinutes: try container.decodeIfPresent(Int.self, forKey: .windowMinutes),
+            usedPercent: try container.decode(Double.self, forKey: .usedPercent),
+            resetsAt: try container.decodeIfPresent(Date.self, forKey: .resetsAt)
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encodeIfPresent(windowMinutes, forKey: .windowMinutes)
+        try container.encode(usedPercent, forKey: .usedPercent)
+        try container.encodeIfPresent(resetsAt, forKey: .resetsAt)
+    }
 }
 
-public struct ProviderReport: Sendable, Equatable {
+public struct ProviderReport: Sendable, Equatable, Codable {
     public let plan: String?
     public let windows: [UsageWindow]
 
@@ -63,14 +87,29 @@ public struct ProviderStatus: Sendable, Equatable, Identifiable {
         case unavailable(String)
     }
 
+    /// Set when the numbers on screen came from an earlier refresh because this one
+    /// failed. The usage endpoint rate-limits, and a blank menu bar is a worse answer
+    /// than a slightly old one.
+    public struct Stale: Sendable, Equatable {
+        public let since: Date
+        public let reason: String
+
+        public init(since: Date, reason: String) {
+            self.since = since
+            self.reason = reason
+        }
+    }
+
     public let kind: ProviderKind
     public let outcome: Outcome
+    public let stale: Stale?
 
     public var id: String { kind.rawValue }
 
-    public init(kind: ProviderKind, outcome: Outcome) {
+    public init(kind: ProviderKind, outcome: Outcome, stale: Stale? = nil) {
         self.kind = kind
         self.outcome = outcome
+        self.stale = stale
     }
 
     public var report: ProviderReport? {

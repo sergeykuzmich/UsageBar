@@ -279,14 +279,102 @@ struct UsageStoreTests {
         #expect(store.menuBarReadout == .single(18))
     }
 
+    /// A free Codex plan has no short window, so there is nothing to put on the other
+    /// side of the slash and the bare number stands alone.
     @MainActor
-    @Test func bothWindowsFallsBackWhenTheProviderHasOnlyOne() {
+    @Test func bothWindowsShowsABareNumberWhenTheProviderHasOnlyOne() {
         let store = UsageStore(defaults: Self.scratchDefaults(#function))
         store.apply(Self.bothProviders)
         store.menuBarSource = .codex
         store.showsBothWindows = true
 
-        #expect(store.menuBarReadout == .single(18))
+        #expect(store.menuBarReadout == .windows([
+            MenuBarReadout.Entry(id: "primary", initial: "m", usedPercent: 18)
+        ]))
+    }
+
+    @MainActor
+    @Test func bothWindowsPutsTheShortWindowFirst() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.menuBarSource = .claude
+        store.showsBothWindows = true
+        store.apply([
+            ProviderStatus(kind: .claude, outcome: .report(ProviderReport(plan: "max", windows: [
+                UsageWindow(id: "seven_day", windowMinutes: 10080, usedPercent: 24, resetsAt: nil),
+                UsageWindow(id: "five_hour", windowMinutes: 300, usedPercent: 11, resetsAt: nil),
+            ])))
+        ])
+
+        #expect(store.menuBarReadout == .windows([
+            MenuBarReadout.Entry(id: "five_hour", initial: "h", usedPercent: 11),
+            MenuBarReadout.Entry(id: "seven_day", initial: "w", usedPercent: 24),
+        ]))
+    }
+
+    /// The usage endpoint rate-limits. Emptying the menu bar on a transient failure is
+    /// how a working account came to show a blank ring with no explanation anywhere.
+    @MainActor
+    @Test func aFailedRefreshKeepsTheLastReading() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        let start = Date()
+        store.apply(Self.bothProviders, now: start)
+
+        store.apply(
+            [
+                ProviderStatus(kind: .claude, outcome: .unavailable("rate limited")),
+                Self.bothProviders[1],
+            ],
+            now: start.addingTimeInterval(300)
+        )
+
+        let claude = try! #require(store.statuses.first { $0.kind == .claude })
+        #expect(claude.report?.windows.map(\.usedPercent) == [6, 16])
+        #expect(claude.stale?.reason == "rate limited")
+        #expect(claude.stale?.since == start)
+        #expect(store.available.count == 2)
+    }
+
+    @MainActor
+    @Test func aReadingStopsStandingInAfterAnHour() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        let start = Date()
+        store.apply(Self.bothProviders, now: start)
+
+        store.apply(
+            [ProviderStatus(kind: .claude, outcome: .unavailable("rate limited"))],
+            now: start.addingTimeInterval(UsageStore.staleLimit + 1)
+        )
+
+        let claude = try! #require(store.statuses.first { $0.kind == .claude })
+        #expect(claude.report == nil)
+        #expect(claude.unavailableReason == "rate limited")
+    }
+
+    /// Skipping a provider that was fetched moments ago is what keeps launches and
+    /// timer ticks from stacking into a burst the endpoint rejects.
+    @MainActor
+    @Test func aProviderFetchedMomentsAgoKeepsItsReadingWhenSkipped() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        let start = Date()
+        store.apply(Self.bothProviders, now: start)
+
+        store.apply([], now: start.addingTimeInterval(60))
+
+        #expect(store.available.count == 2)
+        #expect(store.statuses.allSatisfy { $0.stale == nil })
+    }
+
+    @MainActor
+    @Test func aRelaunchStartsFromTheCachedReading() {
+        let defaults = Self.scratchDefaults(#function)
+        let first = UsageStore(defaults: defaults)
+        first.apply(Self.bothProviders)
+
+        let relaunched = UsageStore(defaults: defaults)
+
+        #expect(relaunched.available.count == 2)
+        #expect(relaunched.statuses.allSatisfy { $0.stale != nil })
+        #expect(relaunched.menuBarReadout == .single(18))
     }
 
     @MainActor

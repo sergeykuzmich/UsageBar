@@ -23,14 +23,6 @@ struct MenuBarImageTests {
         }
     }
 
-    /// The bug this file exists for: the second row silently went missing.
-    @Test func bothRowsAreDrawn() {
-        let ink = Self.inkPerHalf(Self.twoWindows)
-
-        #expect(ink.top > 0, "top row missing")
-        #expect(ink.bottom > 0, "bottom row missing")
-    }
-
     /// Ink touching the canvas edge means a glyph ran past the bounds and was cut.
     /// This is what a two-row layout built on line height instead of cap height does.
     /// Checked at 1x as well as 2x: a Retina machine hid an overshooting glyph that a
@@ -47,11 +39,13 @@ struct MenuBarImageTests {
 
     /// Two rows have to carry comparable ink. A clipped row still leaves a sliver, so
     /// counting halves alone is not enough to prove both rows are whole.
-    @Test func neitherRowIsShortchanged() {
-        let ink = Self.inkPerHalf(Self.twoWindows)
-        let ratio = Double(min(ink.top, ink.bottom)) / Double(max(ink.top, ink.bottom))
+    @Test func bothNumbersAreDrawn() {
+        let one = MenuBarImage.image(for: .windows([
+            MenuBarReadout.Entry(id: "a", initial: "h", usedPercent: 11)
+        ]))
+        let two = MenuBarImage.image(for: Self.twoWindows)
 
-        #expect(ratio > 0.6, "rows are lopsided: \(ink)")
+        #expect(two.size.width > one.size.width, "the second number is missing")
     }
 
     static func inkPerRow(_ readout: MenuBarReadout, scale: Int) -> [Int] {
@@ -85,11 +79,11 @@ struct MenuBarImageTests {
         #expect(ink.top + ink.bottom > 0)
     }
 
-    @Test func rowsDropTheUnitAndThePercentSign() {
-        #expect(MenuBarImage.Row(initial: "h", percent: 10).text == "h 10")
-        #expect(MenuBarImage.Row(initial: "w", percent: 17.4).text == "w 17")
-        #expect(MenuBarImage.Row(initial: "m", percent: 99.6).text == "m 100")
-        #expect(MenuBarImage.Row(initial: nil, percent: 8).text == "8")
+    @Test func windowsReadAsBareNumbersSplitByASlash() {
+        #expect(MenuBarImage.text(forPercents: [11, 24]) == "11 / 24")
+        #expect(MenuBarImage.text(forPercents: [11.4, 23.6]) == "11 / 24")
+        #expect(MenuBarImage.text(forPercents: [24]) == "24")
+        #expect(MenuBarImage.text(forPercents: [0, 100]) == "0 / 100")
     }
 
     /// A red row has to keep its color, and the menu bar recolors template images.
@@ -105,9 +99,9 @@ struct MenuBarImageTests {
     }
 
     @Test func exhaustionStartsAtAHundred() {
-        #expect(MenuBarImage.Row(initial: "h", percent: 99.4).isExhausted == false)
-        #expect(MenuBarImage.Row(initial: "h", percent: 100).isExhausted)
-        #expect(MenuBarImage.Row(initial: "h", percent: 140).isExhausted)
+        #expect(MenuBarImage.windows([99, 20]).isTemplate)
+        #expect(MenuBarImage.windows([100, 20]).isTemplate == false)
+        #expect(MenuBarImage.windows([20, 140]).isTemplate == false)
     }
 
     @Test func widthTracksTheWidestRow() {

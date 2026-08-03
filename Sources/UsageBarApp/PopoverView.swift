@@ -21,14 +21,21 @@ struct PopoverView: View {
     @ViewBuilder
     private func body(now: Date) -> some View {
         let available = store.available
+        let unavailable = store.unavailable
         if available.isEmpty {
-            EmptyStateView(statuses: store.unavailable, isRefreshing: store.isRefreshing)
+            EmptyStateView(statuses: unavailable, isRefreshing: store.isRefreshing)
         } else {
             ForEach(Array(available.enumerated()), id: \.element.id) { index, status in
                 if index > 0 {
                     Divider().padding(.vertical, 10)
                 }
                 ProviderSection(status: status, now: now)
+            }
+            // A provider that failed while the other one worked used to be invisible
+            // here, which left no way to find out why the menu bar had gone blank.
+            ForEach(unavailable) { status in
+                Divider().padding(.vertical, 10)
+                UnavailableRow(status: status)
             }
         }
     }
@@ -56,6 +63,28 @@ private struct ProviderSection: View {
             ForEach(status.report?.windows ?? []) { window in
                 WindowRow(window: window, now: now)
             }
+            if let stale = status.stale {
+                Text("\(RelativeTime.sinceUpdate(stale.since, now: now)) · \(stale.reason)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Palette.mutedInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+private struct UnavailableRow: View {
+    let status: ProviderStatus
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(status.kind.displayName)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Palette.secondaryInk)
+            Text(status.unavailableReason ?? "Unavailable.")
+                .font(.system(size: 12))
+                .foregroundStyle(Palette.mutedInk)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -149,7 +178,7 @@ private struct FooterView: View {
                 .foregroundStyle(Palette.mutedInk)
             Spacer()
             Button {
-                store.refresh()
+                store.refresh(force: true)
             } label: {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 13, weight: .medium))

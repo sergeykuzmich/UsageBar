@@ -28,12 +28,14 @@ Both CLIs are probed independently. Whichever ones answer get a section; if neit
 
 Usage refreshes every 5 minutes and whenever you press refresh.
 
-Under **⋯ → Show in Menu Bar**, pick whether the menu bar number tracks Claude Code, Codex, or whichever of the two is highest. A single number always reports the long window — weekly, or monthly on a free Codex plan — so it never changes meaning under you. To see the short window too, pin one provider and turn on **Show Both Windows**, which stacks both readings as `h 11` over `w 17`. The letter is the window (`h`ourly, `d`aily, `w`eekly, `m`onthly) and the percent sign is dropped to leave the digits room. When a window is spent the label turns into a red `h 100%`. Both choices are remembered across restarts.
+Under **⋯ → Show in Menu Bar**, pick whether the menu bar number tracks Claude Code, Codex, or whichever of the two is highest. A single number always reports the long window — weekly, or monthly on a free Codex plan — so it never changes meaning under you. To see the short window too, pin one provider and turn on **Show Both Windows**, which reads `11 / 24`: short window, then long. A provider with only one window just shows `24`. When either is spent the whole label turns red. Both choices are remembered across restarts.
 
 ## How it reads the numbers
 
 - **Codex** exposes usage over its app-server protocol. UsageBar runs `codex app-server` and calls `account/rateLimits/read`.
 - **Claude Code** has no non-interactive usage command, so UsageBar does what the `/usage` screen does: it reads the OAuth token Claude Code already stored in your keychain and calls `GET /api/oauth/usage`. The token is only ever sent to `api.anthropic.com`, and it is never written back or refreshed. If it has expired, run `claude` once and it refreshes itself.
+
+That endpoint rate-limits, and Claude Code itself mostly avoids it: it reads live limits off the `anthropic-ratelimit-unified-*` headers of API calls it is already making, and only fetches `/api/oauth/usage` for the `/usage` screen behind a cache. UsageBar has no API traffic to piggyback on, so it fetches — at most once every 5 minutes per provider, retrying on a 429 and falling back to the last reading (for up to an hour) rather than blanking out. Readings are cached to disk so a relaunch does not trigger a fetch.
 
 Nothing is uploaded anywhere else, and there is no config file.
 

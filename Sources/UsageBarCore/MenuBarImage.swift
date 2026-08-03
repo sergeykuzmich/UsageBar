@@ -3,20 +3,20 @@ import AppKit
 /// MenuBarExtra turns a text-only label into the status item's *title string*, and a
 /// stack of two `Text`s collapses into just the first one, which is why two rows never
 /// appeared. Drawing the label and handing over a finished image is the only way to
-/// control what the menu bar shows, and it is also what makes a red row possible.
+/// control what the menu bar shows, and it is also what makes a red label possible.
 public enum MenuBarImage {
     public static let height: CGFloat = 22
     public static let exhausted: Double = 100
 
-    static let rowFontSize: CGFloat = 11
-    static let singleFontSize: CGFloat = 12
+    static let fontSize: CGFloat = 12
     static let ringDiameter: CGFloat = 12
     static let ringGap: CGFloat = 4
+    static let padding: CGFloat = 2
 
     /// A template image is a pure alpha mask that the menu bar recolors to match
-    /// itself, so the ink color only matters when we opt out of that for red. Drawing
-    /// masks in black rather than `labelColor` keeps them identical in either
-    /// appearance, which also makes them testable.
+    /// itself, so ink color only matters when we opt out of that for red. Drawing masks
+    /// in black rather than `labelColor` keeps them identical in either appearance,
+    /// which also makes them testable.
     static let maskInk = NSColor.black
 
     public static func image(for readout: MenuBarReadout) -> NSImage {
@@ -24,87 +24,59 @@ public enum MenuBarImage {
         case .empty:
             ring(fraction: nil, trailing: nil, ink: maskInk, isTemplate: true)
         case .single(let percent):
-            percent >= exhausted
-                ? ring(fraction: 1, trailing: "100%", ink: .systemRed, isTemplate: false)
-                : ring(
-                    fraction: percent / 100,
-                    trailing: "\(Int(percent.rounded()))%",
-                    ink: maskInk,
-                    isTemplate: true
-                )
+            ring(
+                fraction: percent / 100,
+                trailing: "\(rounded(percent))%",
+                ink: percent >= exhausted ? .systemRed : maskInk,
+                isTemplate: percent < exhausted
+            )
         case .windows(let entries):
-            windows(entries.map { Row(initial: $0.initial, percent: $0.usedPercent) })
+            windows(entries.map(\.usedPercent))
         }
     }
 
-    struct Row {
-        let initial: String?
-        let percent: Double
-
-        var isExhausted: Bool { percent >= MenuBarImage.exhausted }
-
-        /// `h 10`, not `5h 10%`. The menu bar is the glance; dropping the unit and the
-        /// percent sign buys the digits room to stay legible on two rows.
-        var text: String {
-            let value = "\(Int(percent.rounded()))"
-            guard let initial else { return value }
-            return "\(initial) \(value)"
-        }
-
-        var exhaustedText: String {
-            guard let initial else { return "100%" }
-            return "\(initial) 100%"
-        }
+    /// `11 / 24`, shortest window first. No unit and no percent sign: the menu bar is
+    /// the glance, and the numbers are the only part worth the space.
+    static func text(forPercents percents: [Double]) -> String {
+        percents.map(rounded).map(String.init).joined(separator: " / ")
     }
 
-    static func windows(_ rows: [Row]) -> NSImage {
-        guard !rows.isEmpty else { return ring(fraction: nil, trailing: nil, ink: maskInk, isTemplate: true) }
+    static func windows(_ percents: [Double]) -> NSImage {
+        guard !percents.isEmpty else { return ring(fraction: nil, trailing: nil, ink: maskInk, isTemplate: true) }
 
-        // Once a window is spent, that is the whole story, so it replaces the readout
-        // instead of tinting one row. It also keeps the image a single color: a
-        // two-color image cannot be a template, and a baked `labelColor` would be the
-        // wrong color the moment the menu bar's appearance differs from the app's.
-        if let spent = rows.first(where: \.isExhausted) {
-            return lines([spent.exhaustedText], fontSize: singleFontSize, ink: .systemRed, isTemplate: false)
-        }
-        return lines(rows.map(\.text), fontSize: rowFontSize, ink: maskInk, isTemplate: true)
+        // One spent window colors the whole label. A two-color image cannot be a
+        // template, and a template is what lets the menu bar recolor it for its own
+        // appearance, so this is all-or-nothing.
+        let spent = percents.contains { $0 >= exhausted }
+        return line(text(forPercents: percents), ink: spent ? .systemRed : maskInk, isTemplate: !spent)
     }
 
-    /// Stacked by cap height rather than by line height. Two 11pt line boxes come to
-    /// 26pt and would overflow a 22pt bar, but none of these glyphs descend below the
-    /// baseline, so the rows can be packed to the height of the digits themselves.
-    static func lines(_ texts: [String], fontSize: CGFloat, ink: NSColor, isTemplate: Bool) -> NSImage {
+    static func line(_ text: String, ink: NSColor, isTemplate: Bool) -> NSImage {
         let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .medium)
-        let lines = texts.map {
-            NSAttributedString(string: $0, attributes: [.font: font, .foregroundColor: ink])
-        }
-        let width = max(ceil(lines.map { $0.size().width }.max() ?? 0), 1)
-
-        // Round digits overshoot the cap height slightly and antialias past that again,
-        // so the padding is reserved first and the rows share whatever is left. Deriving
-        // the gap from a fixed padding keeps the clear edge even at 1x, where a
-        // computed-from-the-middle margin left ink on the top row of pixels.
-        let padding: CGFloat = 2
-        let rowCount = CGFloat(lines.count)
-        let gap = rowCount > 1 ? (height - 2 * padding - rowCount * font.capHeight) / (rowCount - 1) : 0
-        let topBaseline =
-            rowCount > 1
-            ? height - padding - font.capHeight
-            : (height - font.capHeight) / 2
+        let line = NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: ink])
+        let width = max(ceil(line.size().width), 1)
 
         let image = NSImage(size: NSSize(width: width, height: height))
         image.lockFocus()
-        for (index, line) in lines.enumerated() {
-            let baseline = topBaseline - CGFloat(index) * (font.capHeight + gap)
-            line.draw(at: NSPoint(x: 0, y: baseline + font.descender))
-        }
+        line.draw(at: NSPoint(x: 0, y: baseline(for: font) + font.descender))
         image.unlockFocus()
         image.isTemplate = isTemplate
         return image
     }
 
+    /// Round digits overshoot the cap height and antialias past that again, so the
+    /// glyphs are centred on cap height with padding reserved rather than on the line
+    /// box. A tighter margin left ink on the top pixel row of CI's renderer.
+    static func baseline(for font: NSFont) -> CGFloat {
+        max((height - font.capHeight) / 2, padding)
+    }
+
+    static func rounded(_ percent: Double) -> Int {
+        Int(percent.rounded())
+    }
+
     static func ring(fraction: Double?, trailing: String?, ink: NSColor, isTemplate: Bool) -> NSImage {
-        let font = NSFont.monospacedDigitSystemFont(ofSize: singleFontSize, weight: .medium)
+        let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .medium)
         let label = trailing.map {
             NSAttributedString(string: $0, attributes: [.font: font, .foregroundColor: ink])
         }
@@ -138,8 +110,7 @@ public enum MenuBarImage {
         }
 
         if let label {
-            let size = label.size()
-            label.draw(at: NSPoint(x: ringDiameter + ringGap, y: (height - size.height) / 2))
+            label.draw(at: NSPoint(x: ringDiameter + ringGap, y: baseline(for: font) + font.descender))
         }
         image.unlockFocus()
         image.isTemplate = isTemplate

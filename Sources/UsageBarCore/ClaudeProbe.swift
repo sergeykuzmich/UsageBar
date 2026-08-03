@@ -72,6 +72,11 @@ public enum ClaudeProbe {
         throw ClaudeProbeError(message: "Could not read Claude's credentials from the keychain. Approve the access prompt, or run `claude` to sign in again.")
     }
 
+    /// The endpoint rate-limits readily and its `retry-after` comes back as `0`, so the
+    /// backoff is ours. Observed live: two 429s in a row, then a 200 on the third try
+    /// about forty seconds later.
+    static let retryDelays: [Duration] = [.seconds(3), .seconds(15)]
+
     private static func fetchWindows(token: String, session: URLSession) async throws -> [UsageWindow] {
         var request = URLRequest(url: usageEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
@@ -79,16 +84,23 @@ public enum ClaudeProbe {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 20
 
-        let (data, response) = try await session.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        switch status {
-        case 200:
-            return try ClaudeUsageParser.windows(from: data)
-        case 401, 403:
-            throw ClaudeProbeError(message: "Claude's saved token was rejected. Run `claude` once to refresh it.")
-        default:
-            throw ClaudeProbeError(message: "Claude usage request failed (HTTP \(status)).")
+        for attempt in 0...retryDelays.count {
+            let (data, response) = try await session.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            switch status {
+            case 200:
+                return try ClaudeUsageParser.windows(from: data)
+            case 401, 403:
+                throw ClaudeProbeError(message: "Claude's saved token was rejected. Run `claude` once to refresh it.")
+            case 429 where attempt < retryDelays.count:
+                try? await Task.sleep(for: retryDelays[attempt])
+            case 429:
+                throw ClaudeProbeError(message: "Claude's usage endpoint is rate limiting. Showing the last reading.")
+            default:
+                throw ClaudeProbeError(message: "Claude usage request failed (HTTP \(status)).")
+            }
         }
+        throw ClaudeProbeError(message: "Claude's usage endpoint is rate limiting. Showing the last reading.")
     }
 }
 
