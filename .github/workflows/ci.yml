@@ -1,0 +1,15 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+      - run: ./scripts/build-app.sh --universal
+      - run: lipo -info dist/UsageBar.app/Contents/MacOS/usagebar

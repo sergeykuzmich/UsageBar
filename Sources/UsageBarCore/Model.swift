@@ -1,0 +1,108 @@
+import Foundation
+
+public enum ProviderKind: String, Sendable, CaseIterable, Identifiable {
+    case claude
+    case codex
+
+    public var id: String { rawValue }
+
+    public var displayName: String {
+        switch self {
+        case .claude: "Claude Code"
+        case .codex: "Codex"
+        }
+    }
+
+    public var executableName: String {
+        switch self {
+        case .claude: "claude"
+        case .codex: "codex"
+        }
+    }
+}
+
+public struct UsageWindow: Sendable, Equatable, Identifiable {
+    public let id: String
+    public let title: String
+    public let usedPercent: Double
+    public let resetsAt: Date?
+
+    public init(id: String, title: String, usedPercent: Double, resetsAt: Date?) {
+        self.id = id
+        self.title = title
+        self.usedPercent = usedPercent
+        self.resetsAt = resetsAt
+    }
+}
+
+public struct ProviderReport: Sendable, Equatable {
+    public let plan: String?
+    public let windows: [UsageWindow]
+
+    public init(plan: String?, windows: [UsageWindow]) {
+        self.plan = plan
+        self.windows = windows
+    }
+}
+
+public struct ProviderStatus: Sendable, Equatable, Identifiable {
+    public enum Outcome: Sendable, Equatable {
+        case report(ProviderReport)
+        case unavailable(String)
+    }
+
+    public let kind: ProviderKind
+    public let outcome: Outcome
+
+    public var id: String { kind.rawValue }
+
+    public init(kind: ProviderKind, outcome: Outcome) {
+        self.kind = kind
+        self.outcome = outcome
+    }
+
+    public var report: ProviderReport? {
+        if case .report(let report) = outcome { return report }
+        return nil
+    }
+
+    public var unavailableReason: String? {
+        if case .unavailable(let reason) = outcome { return reason }
+        return nil
+    }
+}
+
+/// Names a usage window by how long it runs, because the same field carries a
+/// different window depending on the plan: a free Codex account reports a 30-day
+/// window where a paid one reports five hours.
+public func usageWindowTitle(windowMinutes: Int?) -> String {
+    guard let minutes = windowMinutes, minutes > 0 else { return "Usage" }
+    switch minutes {
+    case 10080: return "Weekly"
+    case 1440: return "Daily"
+    case 43200: return "Monthly"
+    default: break
+    }
+    if minutes % 1440 == 0 { return "\(minutes / 1440)-day" }
+    if minutes % 60 == 0 { return "\(minutes / 60)-hour" }
+    return "\(minutes)-minute"
+}
+
+enum ISO8601 {
+    /// The usage endpoint returns microsecond precision, which the fractional-seconds
+    /// formatter rejects on some OS versions, so fall back to the plain form.
+    static func date(from string: String) -> Date? {
+        let withFraction = ISO8601DateFormatter()
+        withFraction.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = withFraction.date(from: string) { return date }
+
+        let plain = ISO8601DateFormatter()
+        plain.formatOptions = [.withInternetDateTime]
+        if let date = plain.date(from: string) { return date }
+
+        guard let dot = string.firstIndex(of: "."),
+            let offsetStart = string[dot...].firstIndex(where: { $0 == "+" || $0 == "-" || $0 == "Z" })
+        else { return nil }
+        return plain.date(from: String(string[..<dot]) + String(string[offsetStart...]))
+    }
+}
