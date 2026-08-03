@@ -213,6 +213,45 @@ struct UsageStoreTests {
         #expect(store.headlinePercent == 18)
     }
 
+    static let spikingShortWindow: [ProviderStatus] = [
+        ProviderStatus(kind: .claude, outcome: .report(ProviderReport(plan: "max", windows: [
+            UsageWindow(id: "five_hour", windowMinutes: 300, usedPercent: 90, resetsAt: nil),
+            UsageWindow(id: "seven_day", windowMinutes: 10080, usedPercent: 16, resetsAt: nil),
+        ]))),
+        ProviderStatus(kind: .codex, outcome: .report(ProviderReport(plan: "free", windows: [
+            UsageWindow(id: "primary", windowMinutes: 43200, usedPercent: 18, resetsAt: nil)
+        ]))),
+    ]
+
+    /// A single number has to keep meaning the same thing. Reporting whichever window
+    /// happened to be worst made it jump to the 5-hour whenever that spiked.
+    @MainActor
+    @Test func aSingleNumberReportsTheLongWindowEvenWhenTheShortOneIsWorse() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply(Self.spikingShortWindow)
+
+        #expect(store.menuBarReadout == .single(18))
+
+        store.menuBarSource = .claude
+        #expect(store.menuBarReadout == .single(16))
+
+        store.menuBarSource = .codex
+        #expect(store.menuBarReadout == .single(18))
+    }
+
+    @MainActor
+    @Test func theShortWindowIsStillReachableThroughBothWindows() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply(Self.spikingShortWindow)
+        store.menuBarSource = .claude
+        store.showsBothWindows = true
+
+        #expect(store.menuBarReadout == .windows([
+            MenuBarReadout.Entry(id: "five_hour", shortTitle: "5h", usedPercent: 90),
+            MenuBarReadout.Entry(id: "seven_day", shortTitle: "7d", usedPercent: 16),
+        ]))
+    }
+
     @MainActor
     @Test func bothWindowsRendersOneRowPerWindow() {
         let store = UsageStore(defaults: Self.scratchDefaults(#function))

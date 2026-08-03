@@ -39,21 +39,23 @@ public final class UsageStore {
 
     public var menuBarReadout: MenuBarReadout {
         let scoped = menuBarSource.providerKind.map { kind in available.filter { $0.kind == kind } } ?? available
-        let windows = scoped.flatMap { $0.report?.windows ?? [] }
-        guard let highest = windows.map(\.usedPercent).max() else { return .empty }
+        let reports = scoped.compactMap(\.report)
 
-        guard showsBothWindows, menuBarSource.providerKind != nil, windows.count > 1 else {
-            return .single(highest)
+        if showsBothWindows, menuBarSource.providerKind != nil,
+            let windows = reports.first?.windows, windows.count > 1 {
+            return .windows(
+                windows.prefix(2).map {
+                    MenuBarReadout.Entry(id: $0.id, shortTitle: $0.shortTitle, usedPercent: $0.usedPercent)
+                }
+            )
         }
-        return .windows(
-            windows.prefix(2).map {
-                MenuBarReadout.Entry(id: $0.id, shortTitle: $0.shortTitle, usedPercent: $0.usedPercent)
-            }
-        )
+
+        guard let highest = reports.compactMap(\.longestWindow).map(\.usedPercent).max() else { return .empty }
+        return .single(highest)
     }
 
-    /// The worst window of whichever providers `menuBarSource` covers. Nil when the
-    /// chosen provider did not answer, which leaves the menu bar showing an empty ring.
+    /// Nil when the chosen provider did not answer, which leaves the menu bar showing
+    /// an empty ring.
     public var headlinePercent: Double? {
         menuBarReadout.highestPercent
     }

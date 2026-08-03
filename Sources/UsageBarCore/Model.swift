@@ -23,6 +23,7 @@ public enum ProviderKind: String, Sendable, CaseIterable, Identifiable {
 
 public struct UsageWindow: Sendable, Equatable, Identifiable {
     public let id: String
+    public let windowMinutes: Int?
     public let title: String
     /// Menu bar form, e.g. `5h`. Nil when the provider did not say how long the
     /// window runs, in which case there is nothing truthful to abbreviate.
@@ -32,6 +33,7 @@ public struct UsageWindow: Sendable, Equatable, Identifiable {
 
     public init(id: String, windowMinutes: Int?, usedPercent: Double, resetsAt: Date?) {
         self.id = id
+        self.windowMinutes = windowMinutes
         self.title = usageWindowTitle(windowMinutes: windowMinutes)
         self.shortTitle = usageWindowShortTitle(windowMinutes: windowMinutes)
         self.usedPercent = usedPercent
@@ -46,6 +48,13 @@ public struct ProviderReport: Sendable, Equatable {
     public init(plan: String?, windows: [UsageWindow]) {
         self.plan = plan
         self.windows = windows
+    }
+
+    /// The window a single menu bar number should report. The short window swings hard
+    /// and often, so a number that silently switched between the two would keep
+    /// changing what it means.
+    public var longestWindow: UsageWindow? {
+        windows.max { ($0.windowMinutes ?? 0) < ($1.windowMinutes ?? 0) }
     }
 }
 

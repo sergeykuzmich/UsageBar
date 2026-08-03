@@ -1,11 +1,21 @@
 import SwiftUI
-import UsageBarCore
 
-struct MenuBarLabel: View {
-    let readout: MenuBarReadout
-    let isRefreshing: Bool
+public struct MenuBarLabel: View {
+    public static let rowFontSize: CGFloat = 10
+    public static let rowHeight: CGFloat = 10
+    public static let rowSpacing: CGFloat = 1
+    /// What `NSStatusBar.system.thickness` reports, and the height the label is clipped to.
+    public static let menuBarThickness: CGFloat = 22
 
-    var body: some View {
+    public let readout: MenuBarReadout
+    public let isRefreshing: Bool
+
+    public init(readout: MenuBarReadout, isRefreshing: Bool) {
+        self.readout = readout
+        self.isRefreshing = isRefreshing
+    }
+
+    public var body: some View {
         content
             .opacity(readout == .empty && isRefreshing ? 0.5 : 1)
     }
@@ -22,12 +32,14 @@ struct MenuBarLabel: View {
                     .font(.system(size: 12, weight: .medium).monospacedDigit())
             }
         case .windows(let entries):
-            // Two 10pt rows fit the 24pt menu bar in the width one 12pt row would take,
-            // so showing both windows costs no menu bar space.
-            VStack(alignment: .leading, spacing: -1.5) {
+            // The menu bar is 22pt tall and two natural 10pt line boxes come to 24.5pt,
+            // which silently clips the second row. None of these glyphs descend below
+            // the baseline, so the boxes can be clamped to the type size and fit in 21pt.
+            VStack(alignment: .leading, spacing: Self.rowSpacing) {
                 ForEach(entries) { entry in
                     Text(rowText(entry))
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .font(.system(size: Self.rowFontSize, weight: .medium).monospacedDigit())
+                        .frame(height: Self.rowHeight)
                 }
             }
         }
@@ -43,11 +55,16 @@ struct MenuBarLabel: View {
     }
 }
 
-struct RingGauge: View {
-    let fraction: Double
-    var isKnown = true
+public struct RingGauge: View {
+    public let fraction: Double
+    public var isKnown = true
 
-    var body: some View {
+    public init(fraction: Double, isKnown: Bool = true) {
+        self.fraction = fraction
+        self.isKnown = isKnown
+    }
+
+    public var body: some View {
         ZStack {
             Circle()
                 .strokeBorder(.primary.opacity(0.25), lineWidth: 1.6)

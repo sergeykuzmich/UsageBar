@@ -38,9 +38,10 @@ enum PreviewRender {
                 )
             }
         }
+        let claude = claudeWindows(of: live)
         let shapes: [(String, MenuBarReadout)] = [
-            ("single", live.menuBarReadout),
-            ("both", .windows(claudeWindows(of: live))),
+            ("single", .single(claude.map(\.usedPercent).max() ?? 0)),
+            ("both", .windows(claude)),
             ("empty", .empty),
         ]
         snapshot(
