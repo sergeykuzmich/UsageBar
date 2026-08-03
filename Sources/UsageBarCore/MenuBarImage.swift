@@ -80,9 +80,17 @@ public enum MenuBarImage {
         }
         let width = max(ceil(lines.map { $0.size().width }.max() ?? 0), 1)
 
-        let gap: CGFloat = lines.count > 1 ? 3 : 0
-        let inkHeight = CGFloat(lines.count) * font.capHeight + CGFloat(lines.count - 1) * gap
-        let topBaseline = (height - inkHeight) / 2 + inkHeight - font.capHeight
+        // Round digits overshoot the cap height slightly and antialias past that again,
+        // so the padding is reserved first and the rows share whatever is left. Deriving
+        // the gap from a fixed padding keeps the clear edge even at 1x, where a
+        // computed-from-the-middle margin left ink on the top row of pixels.
+        let padding: CGFloat = 2
+        let rowCount = CGFloat(lines.count)
+        let gap = rowCount > 1 ? (height - 2 * padding - rowCount * font.capHeight) / (rowCount - 1) : 0
+        let topBaseline =
+            rowCount > 1
+            ? height - padding - font.capHeight
+            : (height - font.capHeight) / 2
 
         let image = NSImage(size: NSSize(width: width, height: height))
         image.lockFocus()

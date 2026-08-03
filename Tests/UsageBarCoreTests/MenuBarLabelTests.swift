@@ -33,11 +33,15 @@ struct MenuBarImageTests {
 
     /// Ink touching the canvas edge means a glyph ran past the bounds and was cut.
     /// This is what a two-row layout built on line height instead of cap height does.
+    /// Checked at 1x as well as 2x: a Retina machine hid an overshooting glyph that a
+    /// non-Retina CI runner caught on the top pixel row.
     @Test func nothingIsCutOffAtTheEdges() {
         for readout in [Self.twoWindows, .single(17)] as [MenuBarReadout] {
-            let rows = Self.inkPerRow(readout)
-            #expect(rows.first == 0, "ink on the top edge of \(readout)")
-            #expect(rows.last == 0, "ink on the bottom edge of \(readout)")
+            for scale in [1, 2] {
+                let rows = Self.inkPerRow(readout, scale: scale)
+                #expect(rows.first == 0, "ink on the top edge of \(readout) at \(scale)x")
+                #expect(rows.last == 0, "ink on the bottom edge of \(readout) at \(scale)x")
+            }
         }
     }
 
@@ -50,12 +54,29 @@ struct MenuBarImageTests {
         #expect(ratio > 0.6, "rows are lopsided: \(ink)")
     }
 
-    static func inkPerRow(_ readout: MenuBarReadout) -> [Int] {
-        let image = MenuBarImage.image(for: readout)
-        guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return [] }
+    static func inkPerRow(_ readout: MenuBarReadout, scale: Int) -> [Int] {
+        guard let bitmap = rasterize(MenuBarImage.image(for: readout), scale: scale) else { return [] }
         return (0..<bitmap.pixelsHigh).map { y in
             (0..<bitmap.pixelsWide).count { x in (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.3 }
         }
+    }
+
+    /// `tiffRepresentation` rasterizes at whatever the attached display uses, so the
+    /// scale has to be pinned to test both.
+    static func rasterize(_ image: NSImage, scale: Int) -> NSBitmapImageRep? {
+        guard let rep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(image.size.width) * scale,
+            pixelsHigh: Int(image.size.height) * scale,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+        ) else { return nil }
+        rep.size = image.size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        image.draw(in: NSRect(origin: .zero, size: image.size))
+        NSGraphicsContext.restoreGraphicsState()
+        return rep
     }
 
     @Test func aSingleNumberDraws() {
