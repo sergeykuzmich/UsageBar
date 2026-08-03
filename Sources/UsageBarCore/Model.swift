@@ -25,9 +25,8 @@ public struct UsageWindow: Sendable, Equatable, Identifiable {
     public let id: String
     public let windowMinutes: Int?
     public let title: String
-    /// Menu bar form, e.g. `5h`. Nil when the provider did not say how long the
-    /// window runs, in which case there is nothing truthful to abbreviate.
-    public let shortTitle: String?
+    /// Single letter for the menu bar: `h`, `d`, `w`, `m`.
+    public let initial: String?
     public let usedPercent: Double
     public let resetsAt: Date?
 
@@ -35,7 +34,7 @@ public struct UsageWindow: Sendable, Equatable, Identifiable {
         self.id = id
         self.windowMinutes = windowMinutes
         self.title = usageWindowTitle(windowMinutes: windowMinutes)
-        self.shortTitle = usageWindowShortTitle(windowMinutes: windowMinutes)
+        self.initial = usageWindowInitial(windowMinutes: windowMinutes)
         self.usedPercent = usedPercent
         self.resetsAt = resetsAt
     }
@@ -101,12 +100,18 @@ public func usageWindowTitle(windowMinutes: Int?) -> String {
     return "\(minutes)-minute"
 }
 
-public func usageWindowShortTitle(windowMinutes: Int?) -> String? {
+/// One letter for the menu bar, picked by how long the window runs rather than by its
+/// exact length, so a 5-hour and a 1-hour window both read as `h`.
+public func usageWindowInitial(windowMinutes: Int?) -> String? {
     guard let minutes = windowMinutes, minutes > 0 else { return nil }
-    if minutes % 1440 == 0 { return "\(minutes / 1440)d" }
-    if minutes % 60 == 0 { return "\(minutes / 60)h" }
-    return "\(minutes)m"
+    switch minutes {
+    case ..<1440: return "h"
+    case ..<10080: return "d"
+    case ..<43200: return "w"
+    default: return "m"
+    }
 }
+
 
 enum ISO8601 {
     /// The usage endpoint returns microsecond precision, which the fractional-seconds

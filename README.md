@@ -28,7 +28,7 @@ Both CLIs are probed independently. Whichever ones answer get a section; if neit
 
 Usage refreshes every 5 minutes and whenever you press refresh.
 
-Under **⋯ → Show in Menu Bar**, pick whether the menu bar number tracks Claude Code, Codex, or whichever of the two is highest. A single number always reports the long window — weekly, or monthly on a free Codex plan — so it never changes meaning under you. To see the 5-hour too, pin one provider and turn on **Show Both Windows**, which stacks the two readings as `5h 9%` over `7d 17%`. Both choices are remembered across restarts.
+Under **⋯ → Show in Menu Bar**, pick whether the menu bar number tracks Claude Code, Codex, or whichever of the two is highest. A single number always reports the long window — weekly, or monthly on a free Codex plan — so it never changes meaning under you. To see the short window too, pin one provider and turn on **Show Both Windows**, which stacks both readings as `h 11` over `w 17`. The letter is the window (`h`ourly, `d`aily, `w`eekly, `m`onthly) and the percent sign is dropped to leave the digits room. When a window is spent the label turns into a red `h 100%`. Both choices are remembered across restarts.
 
 ## How it reads the numbers
 

@@ -42,29 +42,60 @@ enum PreviewRender {
         let shapes: [(String, MenuBarReadout)] = [
             ("single", .single(claude.map(\.usedPercent).max() ?? 0)),
             ("both", .windows(claude)),
+            ("exhausted", .windows([
+                MenuBarReadout.Entry(id: "a", initial: "h", usedPercent: 100),
+                MenuBarReadout.Entry(id: "b", initial: "w", usedPercent: 63),
+            ])),
             ("empty", .empty),
         ]
-        snapshot(
-            HStack(spacing: 22) {
-                ForEach(shapes, id: \.0) { name, readout in
-                    VStack(spacing: 4) {
-                        MenuBarLabel(readout: readout, isRefreshing: false)
-                            .fixedSize()
-                            .padding(.horizontal, 6).frame(height: 24)
-                        Text(name).font(.system(size: 9)).foregroundStyle(Palette.mutedInk)
-                    }
-                }
-            }.padding(10),
-            dark: false,
-            to: "\(outputDirectory)/label.png"
-        )
+        writeMenuBarSheet(shapes, to: "\(outputDirectory)/label.png")
         NSApplication.shared.terminate(nil)
+    }
+
+    /// Draws the status item images at 3x so they can be read. Goes through the bitmap
+    /// rep because compositing a template `NSImage` directly loses its content.
+    private static func writeMenuBarSheet(_ shapes: [(String, MenuBarReadout)], to path: String) {
+        let scale: CGFloat = 3
+        let gap: CGFloat = 24
+        let images = shapes.map { ($0.0, MenuBarImage.image(for: $0.1)) }
+        let width = images.reduce(gap) { $0 + $1.1.size.width * scale + gap }
+        let height = MenuBarImage.height * scale + 60
+
+        let sheet = NSImage(size: NSSize(width: width, height: height))
+        sheet.lockFocus()
+        NSColor(white: 0.93, alpha: 1).setFill()
+        NSRect(origin: .zero, size: sheet.size).fill()
+        var x = gap
+        for (name, image) in images {
+            let drawn = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+            // Template images are alpha masks, so they must be tinted to be visible.
+            let tinted = NSImage(size: drawn)
+            tinted.lockFocus()
+            image.draw(in: NSRect(origin: .zero, size: drawn))
+            if image.isTemplate {
+                NSColor.black.set()
+                NSRect(origin: .zero, size: drawn).fill(using: .sourceAtop)
+            }
+            tinted.unlockFocus()
+            tinted.draw(at: NSPoint(x: x, y: 34), from: .zero, operation: .sourceOver, fraction: 1)
+            NSAttributedString(
+                string: name,
+                attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]
+            ).draw(at: NSPoint(x: x, y: 8))
+            x += drawn.width + gap
+        }
+        sheet.unlockFocus()
+
+        if let tiff = sheet.tiffRepresentation,
+            let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            try? png.write(to: URL(fileURLWithPath: path))
+        }
     }
 
     private static func claudeWindows(of store: UsageStore) -> [MenuBarReadout.Entry] {
         let windows = store.available.first { $0.kind == .claude }?.report?.windows ?? []
         return windows.prefix(2).map {
-            MenuBarReadout.Entry(id: $0.id, shortTitle: $0.shortTitle, usedPercent: $0.usedPercent)
+            MenuBarReadout.Entry(id: $0.id, initial: $0.initial, usedPercent: $0.usedPercent)
         }
     }
 

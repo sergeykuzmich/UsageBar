@@ -36,12 +36,13 @@ public enum MenuBarReadout: Sendable, Equatable {
 
     public struct Entry: Sendable, Equatable, Identifiable {
         public let id: String
-        public let shortTitle: String?
+        /// Single letter for the menu bar: `h`, `d`, `w`, `m`.
+        public let initial: String?
         public let usedPercent: Double
 
-        public init(id: String, shortTitle: String?, usedPercent: Double) {
+        public init(id: String, initial: String?, usedPercent: Double) {
             self.id = id
-            self.shortTitle = shortTitle
+            self.initial = initial
             self.usedPercent = usedPercent
         }
     }

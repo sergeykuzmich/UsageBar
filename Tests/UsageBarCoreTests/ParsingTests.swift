@@ -152,15 +152,15 @@ struct PresentationTests {
     @Test func fallsBackWhenTheWindowLengthIsUnknown() {
         #expect(usageWindowTitle(windowMinutes: nil) == "Usage")
         #expect(usageWindowTitle(windowMinutes: 0) == "Usage")
-        #expect(usageWindowShortTitle(windowMinutes: nil) == nil)
-        #expect(usageWindowShortTitle(windowMinutes: 0) == nil)
+        #expect(usageWindowInitial(windowMinutes: nil) == nil)
+        #expect(usageWindowInitial(windowMinutes: 0) == nil)
     }
 
     @Test(arguments: [
-        (300, "5h"), (10080, "7d"), (1440, "1d"), (43200, "30d"), (60, "1h"), (90, "90m"),
+        (300, "h"), (60, "h"), (1440, "d"), (4320, "d"), (10080, "w"), (20160, "w"), (43200, "m"),
     ])
-    func abbreviatesWindowsForTheMenuBar(minutes: Int, expected: String) {
-        #expect(usageWindowShortTitle(windowMinutes: minutes) == expected)
+    func labelsWindowsWithOneLetterForTheMenuBar(minutes: Int, expected: String) {
+        #expect(usageWindowInitial(windowMinutes: minutes) == expected)
     }
 
     @Test func formatsTimeUntilReset() {
@@ -247,8 +247,8 @@ struct UsageStoreTests {
         store.showsBothWindows = true
 
         #expect(store.menuBarReadout == .windows([
-            MenuBarReadout.Entry(id: "five_hour", shortTitle: "5h", usedPercent: 90),
-            MenuBarReadout.Entry(id: "seven_day", shortTitle: "7d", usedPercent: 16),
+            MenuBarReadout.Entry(id: "five_hour", initial: "h", usedPercent: 90),
+            MenuBarReadout.Entry(id: "seven_day", initial: "w", usedPercent: 16),
         ]))
     }
 
@@ -261,8 +261,8 @@ struct UsageStoreTests {
 
         #expect(
             store.menuBarReadout == .windows([
-                MenuBarReadout.Entry(id: "five_hour", shortTitle: "5h", usedPercent: 6),
-                MenuBarReadout.Entry(id: "seven_day", shortTitle: "7d", usedPercent: 16),
+                MenuBarReadout.Entry(id: "five_hour", initial: "h", usedPercent: 6),
+                MenuBarReadout.Entry(id: "seven_day", initial: "w", usedPercent: 16),
             ])
         )
         #expect(store.headlinePercent == 16)
@@ -301,8 +301,8 @@ struct UsageStoreTests {
 
         #expect(relaunched.showsBothWindows)
         #expect(relaunched.menuBarReadout == .windows([
-            MenuBarReadout.Entry(id: "five_hour", shortTitle: "5h", usedPercent: 6),
-            MenuBarReadout.Entry(id: "seven_day", shortTitle: "7d", usedPercent: 16),
+            MenuBarReadout.Entry(id: "five_hour", initial: "h", usedPercent: 6),
+            MenuBarReadout.Entry(id: "seven_day", initial: "w", usedPercent: 16),
         ]))
     }
 

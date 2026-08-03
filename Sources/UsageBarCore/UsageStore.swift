@@ -45,7 +45,7 @@ public final class UsageStore {
             let windows = reports.first?.windows, windows.count > 1 {
             return .windows(
                 windows.prefix(2).map {
-                    MenuBarReadout.Entry(id: $0.id, shortTitle: $0.shortTitle, usedPercent: $0.usedPercent)
+                    MenuBarReadout.Entry(id: $0.id, initial: $0.initial, usedPercent: $0.usedPercent)
                 }
             )
         }
