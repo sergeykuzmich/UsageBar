@@ -4,7 +4,7 @@ A macOS menu bar app that shows how much of your Claude Code and Codex usage lim
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-  <img src="docs/screenshot-light.png" width="276" alt="UsageBar popover showing Claude Code and Codex usage">
+  <img src="docs/screenshot-light.png" width="320" alt="UsageBar popover showing Claude Code and Codex usage">
 </picture>
 
 ## Install
@@ -27,6 +27,8 @@ Both CLIs are probed independently. Whichever ones answer get a section; if neit
 - **Codex** — whichever windows your ChatGPT plan reports. Paid plans have a 5-hour and a weekly window; free accounts have a single monthly one.
 
 Usage refreshes every 5 minutes and whenever you press refresh.
+
+The menu bar itself has room for one number. Under **⋯ → Show in Menu Bar**, pick whether that number tracks Claude Code, Codex, or whichever of the two is highest. The choice is remembered across restarts.
 
 ## How it reads the numbers
 

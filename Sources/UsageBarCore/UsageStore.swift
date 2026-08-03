@@ -8,10 +8,19 @@ public final class UsageStore {
     public private(set) var lastRefreshed: Date?
     public private(set) var isRefreshing = false
 
+    public var menuBarSource: MenuBarSource {
+        didSet { defaults.set(menuBarSource.rawValue, forKey: MenuBarSource.defaultsKey) }
+    }
+
+    private let defaults: UserDefaults
     private var refreshTask: Task<Void, Never>?
     private var autoRefreshTask: Task<Void, Never>?
 
-    public init() {}
+    public init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        self.menuBarSource = defaults.string(forKey: MenuBarSource.defaultsKey)
+            .flatMap(MenuBarSource.init(rawValue:)) ?? .highest
+    }
 
     public var available: [ProviderStatus] {
         statuses.filter { $0.report != nil }
@@ -21,10 +30,11 @@ public final class UsageStore {
         statuses.filter { $0.report == nil }
     }
 
-    /// The worst window across every provider that answered, which is the number worth
-    /// carrying in the menu bar.
+    /// The worst window of whichever providers `menuBarSource` covers. Nil when the
+    /// chosen provider did not answer, which leaves the menu bar showing an empty ring.
     public var headlinePercent: Double? {
-        available.flatMap { $0.report?.windows ?? [] }.map(\.usedPercent).max()
+        let scoped = menuBarSource.providerKind.map { kind in available.filter { $0.kind == kind } } ?? available
+        return scoped.flatMap { $0.report?.windows ?? [] }.map(\.usedPercent).max()
     }
 
     public func refresh() {

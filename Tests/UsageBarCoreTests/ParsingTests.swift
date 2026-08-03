@@ -172,9 +172,74 @@ struct PresentationTests {
 
 @Suite("Store")
 struct UsageStoreTests {
+    /// A throwaway domain per test so one test's saved choice cannot leak into another.
+    static func scratchDefaults(_ name: String) -> UserDefaults {
+        let defaults = UserDefaults(suiteName: "usagebar.tests.\(name)")!
+        defaults.removePersistentDomain(forName: "usagebar.tests.\(name)")
+        return defaults
+    }
+
+    static let bothProviders: [ProviderStatus] = [
+        ProviderStatus(kind: .claude, outcome: .report(ProviderReport(plan: "max", windows: [
+            UsageWindow(id: "five_hour", title: "5-hour", usedPercent: 6, resetsAt: nil),
+            UsageWindow(id: "seven_day", title: "Weekly", usedPercent: 16, resetsAt: nil),
+        ]))),
+        ProviderStatus(kind: .codex, outcome: .report(ProviderReport(plan: "free", windows: [
+            UsageWindow(id: "primary", title: "Monthly", usedPercent: 18, resetsAt: nil)
+        ]))),
+    ]
+
+    @MainActor
+    @Test func headlineFollowsTheChosenProvider() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply(Self.bothProviders)
+
+        #expect(store.menuBarSource == .highest)
+        #expect(store.headlinePercent == 18)
+
+        store.menuBarSource = .claude
+        #expect(store.headlinePercent == 16)
+
+        store.menuBarSource = .codex
+        #expect(store.headlinePercent == 18)
+    }
+
+    @MainActor
+    @Test func headlineIsEmptyWhenTheChosenProviderDidNotAnswer() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.menuBarSource = .codex
+        store.apply([
+            Self.bothProviders[0],
+            ProviderStatus(kind: .codex, outcome: .unavailable("`codex` was not found.")),
+        ])
+
+        #expect(store.headlinePercent == nil)
+    }
+
+    @MainActor
+    @Test func theChoiceSurvivesARestart() {
+        let defaults = Self.scratchDefaults(#function)
+        let first = UsageStore(defaults: defaults)
+        first.menuBarSource = .claude
+
+        let relaunched = UsageStore(defaults: defaults)
+        relaunched.apply(Self.bothProviders)
+
+        #expect(relaunched.menuBarSource == .claude)
+        #expect(relaunched.headlinePercent == 16)
+    }
+
+    @MainActor
+    @Test func fallsBackToHighestWhenTheStoredChoiceIsUnreadable() {
+        let defaults = Self.scratchDefaults(#function)
+        defaults.set("gemini", forKey: MenuBarSource.defaultsKey)
+
+        #expect(UsageStore(defaults: defaults).menuBarSource == .highest)
+    }
+
     @MainActor
     @Test func headlineTracksTheWorstWindowAcrossProviders() {
-        let store = UsageStore()
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
         store.apply([
             ProviderStatus(
                 kind: .claude,
@@ -198,7 +263,7 @@ struct UsageStoreTests {
 
     @MainActor
     @Test func headlineIsAbsentWhenNothingCouldBeProbed() {
-        let store = UsageStore()
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
         store.apply([
             ProviderStatus(kind: .claude, outcome: .unavailable("not installed")),
             ProviderStatus(kind: .codex, outcome: .unavailable("not installed")),

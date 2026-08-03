@@ -38,11 +38,20 @@ enum PreviewRender {
                 )
             }
         }
+        let bySource: [(String, Double?)] = MenuBarSource.allCases.map { source in
+            live.menuBarSource = source
+            return (source.title, live.headlinePercent)
+        }
+        live.menuBarSource = .highest
+
         snapshot(
-            HStack(spacing: 24) {
-                MenuBarLabel(percent: 6, isRefreshing: false)
-                MenuBarLabel(percent: 72, isRefreshing: false)
-                MenuBarLabel(percent: nil, isRefreshing: true)
+            HStack(spacing: 20) {
+                ForEach(bySource, id: \.0) { title, percent in
+                    VStack(spacing: 4) {
+                        MenuBarLabel(percent: percent, isRefreshing: false)
+                        Text(title).font(.system(size: 9)).foregroundStyle(.secondary)
+                    }
+                }
             }.padding(8),
             dark: false,
             to: "\(outputDirectory)/label.png"

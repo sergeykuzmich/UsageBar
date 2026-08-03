@@ -14,8 +14,8 @@ struct PopoverView: View {
             Divider().padding(.vertical, 10)
             FooterView(store: store)
         }
-        .padding(14)
-        .frame(width: 276)
+        .padding(16)
+        .frame(width: 320)
     }
 
     @ViewBuilder
@@ -42,11 +42,11 @@ private struct ProviderSection: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(status.kind.displayName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 15, weight: .semibold))
                 Spacer()
                 if let plan = status.report?.plan {
                     Text(plan.uppercased())
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
@@ -68,17 +68,17 @@ private struct WindowRow: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(window.title)
-                    .font(.system(size: 11))
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 4)
                 if let resetsAt = window.resetsAt {
                     Text(RelativeTime.untilReset(resetsAt, now: now))
-                        .font(.system(size: 10))
+                        .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
                 }
                 Text("\(Int(window.usedPercent.rounded()))%")
-                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .frame(width: 32, alignment: .trailing)
+                    .font(.system(size: 13, weight: .medium).monospacedDigit())
+                    .frame(width: 38, alignment: .trailing)
             }
             Meter(fraction: window.usedPercent / 100)
         }
@@ -107,7 +107,7 @@ private struct Meter: View {
                     .frame(width: max(clamped * geometry.size.width, clamped > 0 ? 5 : 0))
             }
         }
-        .frame(height: 5)
+        .frame(height: 6)
     }
 }
 
@@ -118,14 +118,14 @@ private struct EmptyStateView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(isRefreshing && statuses.isEmpty ? "Checking…" : "No usage to show")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
             ForEach(statuses) { status in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(status.kind.displayName)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
                     Text(status.unavailableReason ?? "Unavailable.")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -135,7 +135,7 @@ private struct EmptyStateView: View {
 }
 
 private struct FooterView: View {
-    let store: UsageStore
+    @Bindable var store: UsageStore
     @State private var opensAtLogin = LoginItem.isEnabled
 
     /// Reflects back what the service actually reports, so a rejected registration
@@ -153,30 +153,37 @@ private struct FooterView: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(store.lastRefreshed.map { RelativeTime.sinceUpdate($0) } ?? "not checked yet")
-                .font(.system(size: 10))
+                .font(.system(size: 12))
                 .foregroundStyle(.tertiary)
             Spacer()
             Button {
                 store.refresh()
             } label: {
                 Image(systemName: "arrow.clockwise")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
             }
             .buttonStyle(.plain)
             .disabled(store.isRefreshing)
             .help("Refresh")
 
             Menu {
+                Picker("Show in Menu Bar", selection: $store.menuBarSource) {
+                    ForEach(MenuBarSource.allCases) { source in
+                        Text(source.title).tag(source)
+                    }
+                }
+                .pickerStyle(.inline)
+                Divider()
                 Toggle("Open at Login", isOn: loginItemBinding)
                 Divider()
                 Button("Quit UsageBar") { NSApplication.shared.terminate(nil) }
             } label: {
                 Image(systemName: "ellipsis")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
-            .frame(width: 16)
+            .frame(width: 18)
         }
     }
 }
