@@ -13,11 +13,23 @@ A macOS menu bar app that shows how much of your Claude Code and Codex usage lim
 curl -fsSL https://raw.githubusercontent.com/lucas-barake/usagebar/main/install.sh | bash
 ```
 
-Installs to `/Applications` and launches. To update, run it again. To remove it, quit the app and delete `/Applications/UsageBar.app`.
+Run that on any Mac you want it on. It installs to `/Applications` (or `~/Applications` if that is not writable), launches, and works on both Apple silicon and Intel. Requires macOS 14 or newer, plus whichever CLIs you want to see, signed in on that machine.
 
 macOS asks once for keychain access the first time it reads Claude's token. Click **Always Allow**.
 
-Requires macOS 14 or newer.
+**Use the script, not the browser.** The app is ad-hoc signed and not notarized, so `spctl` rejects it. The script works because `curl` does not attach a quarantine flag, and Gatekeeper only blocks quarantined apps. If you download `UsageBar.zip` from the releases page in a browser instead, macOS will refuse to open it, and you would have to clear the flag by hand:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/UsageBar.app
+```
+
+## Updating
+
+UsageBar checks for a new release every 6 hours and offers **⋯ → Update to vX.Y.Z**, which swaps the app and relaunches it. Nothing else to do.
+
+Re-running the install command also works and is the way to get onto a build new enough to have the updater.
+
+To remove it, quit the app and delete `UsageBar.app`.
 
 ## What it shows
 

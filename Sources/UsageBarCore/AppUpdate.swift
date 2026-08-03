@@ -1,0 +1,102 @@
+import Foundation
+
+public struct SemanticVersion: Sendable, Equatable, Comparable, CustomStringConvertible {
+    public let components: [Int]
+
+    /// Accepts `v0.7.0` and `0.7.0` alike, since the tag carries the `v` and the bundle
+    /// version does not.
+    public init?(_ raw: String) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces).drop { $0 == "v" || $0 == "V" }
+        let parts = trimmed.split(separator: ".", omittingEmptySubsequences: false)
+        guard !parts.isEmpty else { return nil }
+        var parsed: [Int] = []
+        for part in parts {
+            // Stops at the first pre-release or build suffix, e.g. `1.2.0-beta1`.
+            let digits = part.prefix { $0.isNumber }
+            guard let value = Int(digits) else { return nil }
+            parsed.append(value)
+            if digits.count != part.count { break }
+        }
+        components = parsed
+    }
+
+    public static func < (lhs: SemanticVersion, rhs: SemanticVersion) -> Bool {
+        for index in 0..<max(lhs.components.count, rhs.components.count) {
+            let left = index < lhs.components.count ? lhs.components[index] : 0
+            let right = index < rhs.components.count ? rhs.components[index] : 0
+            if left != right { return left < right }
+        }
+        return false
+    }
+
+    public var description: String {
+        components.map(String.init).joined(separator: ".")
+    }
+}
+
+public struct AppRelease: Sendable, Equatable {
+    public let version: SemanticVersion
+    public let tag: String
+    public let downloadURL: URL
+
+    public init(version: SemanticVersion, tag: String, downloadURL: URL) {
+        self.version = version
+        self.tag = tag
+        self.downloadURL = downloadURL
+    }
+}
+
+public enum AppUpdate {
+    public static let latestReleaseEndpoint = URL(
+        string: "https://api.github.com/repos/lucas-barake/usagebar/releases/latest"
+    )!
+    public static let assetName = "UsageBar.zip"
+    /// Unauthenticated GitHub API calls are capped per hour per address, and a menu bar
+    /// app has no business asking more often than this anyway.
+    public static let checkInterval: TimeInterval = 6 * 3600
+
+    public struct ParseError: Error, LocalizedError, Equatable {
+        public let message: String
+
+        public init(message: String) {
+            self.message = message
+        }
+
+        public var errorDescription: String? { message }
+    }
+
+    private struct Payload: Decodable {
+        struct Asset: Decodable {
+            let name: String
+            let browser_download_url: URL
+        }
+        let tag_name: String
+        let assets: [Asset]
+    }
+
+    public static func release(from data: Data) throws -> AppRelease {
+        guard let payload = try? JSONDecoder().decode(Payload.self, from: data) else {
+            throw ParseError(message: "Could not read the release feed.")
+        }
+        guard let version = SemanticVersion(payload.tag_name) else {
+            throw ParseError(message: "Release \(payload.tag_name) is not a version number.")
+        }
+        guard let asset = payload.assets.first(where: { $0.name == assetName }) else {
+            throw ParseError(message: "Release \(payload.tag_name) has no \(assetName).")
+        }
+        return AppRelease(version: version, tag: payload.tag_name, downloadURL: asset.browser_download_url)
+    }
+
+    public static func fetchLatest(session: URLSession = .shared) async throws -> AppRelease {
+        var request = URLRequest(url: latestReleaseEndpoint)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.timeoutInterval = 15
+
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        guard status == 200 else {
+            throw ParseError(message: "Update check failed (HTTP \(status)).")
+        }
+        return try release(from: data)
+    }
+}

@@ -157,6 +157,7 @@ private struct EmptyStateView: View {
 
 private struct FooterView: View {
     @Bindable var store: UsageStore
+    let updater = Updater.shared
     @State private var opensAtLogin = LoginItem.isEnabled
 
     /// Reflects back what the service actually reports, so a rejected registration
@@ -188,6 +189,13 @@ private struct FooterView: View {
             .help("Refresh")
 
             Menu {
+                if let release = updater.available {
+                    Button(updater.isInstalling ? "Updating…" : "Update to \(release.tag)") {
+                        updater.install()
+                    }
+                    .disabled(updater.isInstalling)
+                    Divider()
+                }
                 Picker("Show in Menu Bar", selection: $store.menuBarSource) {
                     ForEach(MenuBarSource.allCases) { source in
                         Text(source.title).tag(source)

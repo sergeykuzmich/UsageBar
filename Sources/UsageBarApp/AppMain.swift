@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             UsageStore.shared.startAutoRefresh()
+            Updater.shared.startChecking()
         }
     }
 }
