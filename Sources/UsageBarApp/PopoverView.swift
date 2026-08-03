@@ -47,10 +47,10 @@ private struct ProviderSection: View {
                 if let plan = status.report?.plan {
                     Text(plan.uppercased())
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.mutedInk)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 2)
-                        .background(.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 4))
+                        .background(Palette.badgeFill, in: RoundedRectangle(cornerRadius: 4))
                 }
             }
             ForEach(status.report?.windows ?? []) { window in
@@ -69,42 +69,34 @@ private struct WindowRow: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(window.title)
                     .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryInk)
                 Spacer(minLength: 4)
                 if let resetsAt = window.resetsAt {
                     Text(RelativeTime.untilReset(resetsAt, now: now))
                         .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Palette.mutedInk)
                 }
                 Text("\(Int(window.usedPercent.rounded()))%")
                     .font(.system(size: 13, weight: .medium).monospacedDigit())
                     .frame(width: 38, alignment: .trailing)
             }
-            Meter(fraction: window.usedPercent / 100)
+            Meter(percent: window.usedPercent)
         }
     }
 }
 
 private struct Meter: View {
-    let fraction: Double
+    let percent: Double
 
-    private var clamped: Double { min(max(fraction, 0), 1) }
-
-    private var fill: Color {
-        switch clamped {
-        case ..<0.6: .primary.opacity(0.72)
-        case ..<0.85: .orange
-        default: .red
-        }
-    }
+    private var clamped: Double { min(max(percent / 100, 0), 1) }
 
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                Capsule().fill(.primary.opacity(0.09))
+                Capsule().fill(Palette.meterTrack)
                 Capsule()
-                    .fill(fill)
-                    .frame(width: max(clamped * geometry.size.width, clamped > 0 ? 5 : 0))
+                    .fill(Palette.meterFill(forPercent: percent))
+                    .frame(width: max(clamped * geometry.size.width, clamped > 0 ? 6 : 0))
             }
         }
         .frame(height: 6)
@@ -123,10 +115,10 @@ private struct EmptyStateView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(status.kind.displayName)
                         .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryInk)
                     Text(status.unavailableReason ?? "Unavailable.")
                         .font(.system(size: 12))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Palette.mutedInk)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -154,7 +146,7 @@ private struct FooterView: View {
         HStack(spacing: 8) {
             Text(store.lastRefreshed.map { RelativeTime.sinceUpdate($0) } ?? "not checked yet")
                 .font(.system(size: 12))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Palette.mutedInk)
             Spacer()
             Button {
                 store.refresh()
