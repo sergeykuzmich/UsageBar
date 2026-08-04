@@ -22,6 +22,7 @@ enum PreviewRender {
             ProviderStatus(kind: .claude, outcome: .report(ProviderReport(plan: "max", windows: [
                 UsageWindow(id: "a", windowMinutes: 300, usedPercent: 72, resetsAt: Date().addingTimeInterval(3600 * 2 + 600)),
                 UsageWindow(id: "b", windowMinutes: 10080, usedPercent: 91, resetsAt: Date().addingTimeInterval(86400 * 3)),
+                UsageWindow(id: "b2", windowMinutes: 10080, modelName: "Fable", usedPercent: 37, resetsAt: Date().addingTimeInterval(86400 * 3)),
             ]))),
             ProviderStatus(kind: .codex, outcome: .report(ProviderReport(plan: "pro", windows: [
                 UsageWindow(id: "c", windowMinutes: 300, usedPercent: 12, resetsAt: Date().addingTimeInterval(1800)),

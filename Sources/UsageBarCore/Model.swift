@@ -24,25 +24,30 @@ public enum ProviderKind: String, Sendable, CaseIterable, Identifiable {
 public struct UsageWindow: Sendable, Equatable, Identifiable, Codable {
     public let id: String
     public let windowMinutes: Int?
+    /// Set when the window counts only one model's usage, like Claude's weekly
+    /// Fable limit. Model-scoped windows show in the popover but never drive the
+    /// menu bar number.
+    public let modelName: String?
     public let title: String
     /// Single letter for the menu bar: `h`, `d`, `w`, `m`.
     public let initial: String?
     public let usedPercent: Double
     public let resetsAt: Date?
 
-    public init(id: String, windowMinutes: Int?, usedPercent: Double, resetsAt: Date?) {
+    public init(id: String, windowMinutes: Int?, modelName: String? = nil, usedPercent: Double, resetsAt: Date?) {
         self.id = id
         self.windowMinutes = windowMinutes
-        self.title = usageWindowTitle(windowMinutes: windowMinutes)
+        self.modelName = modelName
+        self.title = usageWindowTitle(windowMinutes: windowMinutes, modelName: modelName)
         self.initial = usageWindowInitial(windowMinutes: windowMinutes)
         self.usedPercent = usedPercent
         self.resetsAt = resetsAt
     }
 
-    // Only the duration is stored; the titles are derived so a cached reading can never
-    // disagree with a freshly parsed one.
+    // Only the duration and model are stored; the titles are derived so a cached
+    // reading can never disagree with a freshly parsed one.
     private enum CodingKeys: String, CodingKey {
-        case id, windowMinutes, usedPercent, resetsAt
+        case id, windowMinutes, modelName, usedPercent, resetsAt
     }
 
     public init(from decoder: Decoder) throws {
@@ -50,6 +55,7 @@ public struct UsageWindow: Sendable, Equatable, Identifiable, Codable {
         self.init(
             id: try container.decode(String.self, forKey: .id),
             windowMinutes: try container.decodeIfPresent(Int.self, forKey: .windowMinutes),
+            modelName: try container.decodeIfPresent(String.self, forKey: .modelName),
             usedPercent: try container.decode(Double.self, forKey: .usedPercent),
             resetsAt: try container.decodeIfPresent(Date.self, forKey: .resetsAt)
         )
@@ -59,6 +65,7 @@ public struct UsageWindow: Sendable, Equatable, Identifiable, Codable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
         try container.encodeIfPresent(windowMinutes, forKey: .windowMinutes)
+        try container.encodeIfPresent(modelName, forKey: .modelName)
         try container.encode(usedPercent, forKey: .usedPercent)
         try container.encodeIfPresent(resetsAt, forKey: .resetsAt)
     }
@@ -75,9 +82,16 @@ public struct ProviderReport: Sendable, Equatable, Codable {
 
     /// The window a single menu bar number should report. The short window swings hard
     /// and often, so a number that silently switched between the two would keep
-    /// changing what it means.
+    /// changing what it means. Model-scoped windows are excluded: they run the same
+    /// seven days as the all-models weekly, and Swift's sort is not stable, so a tie
+    /// could otherwise flip the number between the two meanings across refreshes.
     public var longestWindow: UsageWindow? {
-        windows.max { ($0.windowMinutes ?? 0) < ($1.windowMinutes ?? 0) }
+        accountWindows.max { ($0.windowMinutes ?? 0) < ($1.windowMinutes ?? 0) }
+    }
+
+    /// The windows that count every model, which are the only ones the menu bar reports.
+    public var accountWindows: [UsageWindow] {
+        windows.filter { $0.modelName == nil }
     }
 }
 
@@ -125,8 +139,15 @@ public struct ProviderStatus: Sendable, Equatable, Identifiable {
 
 /// Names a usage window by how long it runs, because the same field carries a
 /// different window depending on the plan: a free Codex account reports a 30-day
-/// window where a paid one reports five hours.
-public func usageWindowTitle(windowMinutes: Int?) -> String {
+/// window where a paid one reports five hours. A model-scoped window carries the
+/// model's name so "Weekly" and "Weekly (Fable)" cannot be confused.
+public func usageWindowTitle(windowMinutes: Int?, modelName: String? = nil) -> String {
+    let base = usageWindowBaseTitle(windowMinutes: windowMinutes)
+    guard let modelName, !modelName.isEmpty else { return base }
+    return "\(base) (\(modelName))"
+}
+
+private func usageWindowBaseTitle(windowMinutes: Int?) -> String {
     guard let minutes = windowMinutes, minutes > 0 else { return "Usage" }
     switch minutes {
     case 10080: return "Weekly"

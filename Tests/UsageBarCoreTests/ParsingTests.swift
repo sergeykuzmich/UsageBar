@@ -89,6 +89,52 @@ struct ClaudeParserTests {
         #expect(windows[1].resetsAt != nil)
     }
 
+    /// The per-model weekly limits only exist inside `limits[]`; there is no
+    /// `seven_day_fable` field. `resets_at` is epoch seconds there, not ISO-8601.
+    @Test func readsModelScopedWeeklyWindowsFromTheLimitsArray() throws {
+        let payload = Data(
+            #"""
+            {"five_hour":{"utilization":4.0,"resets_at":"2026-08-03T06:20:00.790494+00:00"},
+            "seven_day":{"utilization":16.0,"resets_at":"2026-08-09T13:00:00.790515+00:00"},
+            "seven_day_opus":null,
+            "limits":[
+              {"kind":"weekly_scoped","scope":{"model":{"display_name":"Fable"}},
+               "percent":31.0,"resets_at":1786021200},
+              {"kind":"weekly_scoped","scope":null,"percent":16.0,"resets_at":1786021200},
+              {"kind":"overage","scope":{"model":{"display_name":"Fable"}},"percent":2.0},
+              {"kind":"weekly_scoped","scope":{"model":{"display_name":"Opus"}},
+               "percent":null,"resets_at":null}
+            ]}
+            """#.utf8
+        )
+
+        let windows = try ClaudeUsageParser.windows(from: payload)
+
+        #expect(windows.map(\.title) == ["5-hour", "Weekly", "Weekly (Fable)"])
+        #expect(windows[2].id == "weekly_scoped_fable")
+        #expect(windows[2].modelName == "Fable")
+        #expect(windows[2].usedPercent == 31)
+        #expect(windows[2].resetsAt == Date(timeIntervalSince1970: 1_786_021_200))
+    }
+
+    /// A malformed `limits` entry must cost only that entry, not the whole reading.
+    @Test func toleratesUnreadableLimitEntries() throws {
+        let payload = Data(
+            #"""
+            {"five_hour":{"utilization":9.0,"resets_at":null},"seven_day":null,
+            "limits":[
+              {"kind":"weekly_scoped","scope":{"model":{"display_name":"Fable"}},
+               "percent":31.0,"resets_at":{"unexpected":"shape"}}
+            ]}
+            """#.utf8
+        )
+
+        let windows = try ClaudeUsageParser.windows(from: payload)
+
+        #expect(windows.map(\.id) == ["five_hour", "weekly_scoped_fable"])
+        #expect(windows[1].resetsAt == nil)
+    }
+
     @Test func skipsWindowsTheAccountDoesNotHave() throws {
         let payload = Data(#"{"five_hour":{"utilization":9.0,"resets_at":null},"seven_day":null}"#.utf8)
 
@@ -147,6 +193,12 @@ struct PresentationTests {
     ])
     func namesWindowsByDuration(minutes: Int, expected: String) {
         #expect(usageWindowTitle(windowMinutes: minutes) == expected)
+    }
+
+    @Test func namesModelScopedWindowsWithTheModel() {
+        #expect(usageWindowTitle(windowMinutes: 10080, modelName: "Fable") == "Weekly (Fable)")
+        #expect(usageWindowTitle(windowMinutes: 10080, modelName: "") == "Weekly")
+        #expect(usageWindowTitle(windowMinutes: nil, modelName: "Fable") == "Usage (Fable)")
     }
 
     @Test func fallsBackWhenTheWindowLengthIsUnknown() {
@@ -250,6 +302,45 @@ struct UsageStoreTests {
             MenuBarReadout.Entry(id: "five_hour", initial: "h", usedPercent: 90),
             MenuBarReadout.Entry(id: "seven_day", initial: "w", usedPercent: 16),
         ]))
+    }
+
+    static let withModelScopedWeekly: [ProviderStatus] = [
+        ProviderStatus(kind: .claude, outcome: .report(ProviderReport(plan: "max", windows: [
+            UsageWindow(id: "five_hour", windowMinutes: 300, usedPercent: 6, resetsAt: nil),
+            UsageWindow(id: "seven_day", windowMinutes: 10080, usedPercent: 16, resetsAt: nil),
+            UsageWindow(id: "weekly_scoped_fable", windowMinutes: 10080, modelName: "Fable", usedPercent: 82, resetsAt: nil),
+        ])))
+    ]
+
+    /// The Fable weekly runs the same seven days as the all-models weekly, so letting
+    /// it into the menu bar would make the number ambiguous between the two and, on a
+    /// sort tie, able to flip meanings between refreshes.
+    @MainActor
+    @Test func modelScopedWindowsNeverDriveTheMenuBar() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        store.apply(Self.withModelScopedWeekly)
+        store.menuBarSource = .claude
+
+        #expect(store.menuBarReadout == .single(16))
+
+        store.showsBothWindows = true
+        #expect(store.menuBarReadout == .windows([
+            MenuBarReadout.Entry(id: "five_hour", initial: "h", usedPercent: 6),
+            MenuBarReadout.Entry(id: "seven_day", initial: "w", usedPercent: 16),
+        ]))
+    }
+
+    @MainActor
+    @Test func modelScopedWindowsSurviveTheCacheRoundTrip() {
+        let defaults = Self.scratchDefaults(#function)
+        let first = UsageStore(defaults: defaults)
+        first.apply(Self.withModelScopedWeekly)
+
+        let relaunched = UsageStore(defaults: defaults)
+        let claude = try! #require(relaunched.statuses.first { $0.kind == .claude })
+
+        #expect(claude.report?.windows.map(\.title) == ["5-hour", "Weekly", "Weekly (Fable)"])
+        #expect(claude.report?.windows[2].modelName == "Fable")
     }
 
     @MainActor

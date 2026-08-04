@@ -58,7 +58,7 @@ public final class UsageStore {
         let reports = scoped.compactMap(\.report)
 
         if showsBothWindows, menuBarSource.providerKind != nil, let report = reports.first {
-            let windows = report.windows.sorted { ($0.windowMinutes ?? 0) < ($1.windowMinutes ?? 0) }
+            let windows = report.accountWindows.sorted { ($0.windowMinutes ?? 0) < ($1.windowMinutes ?? 0) }
             if !windows.isEmpty {
                 return .windows(
                     windows.prefix(2).map {

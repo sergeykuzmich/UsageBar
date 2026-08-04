@@ -159,10 +159,57 @@ public enum ClaudeUsageParser {
     private struct Payload: Decodable {
         let five_hour: Window?
         let seven_day: Window?
+        let limits: [Limit]?
 
         struct Window: Decodable {
             let utilization: Double?
             let resets_at: String?
+        }
+
+        /// The per-model weekly limits (like Fable's) do not get their own named
+        /// field; they only appear as `weekly_scoped` entries in `limits`, which is
+        /// where Claude Code's own /usage screen reads them from.
+        struct Limit: Decodable {
+            let kind: String?
+            let scope: Scope?
+            let percent: Double?
+            let resets_at: ResetsAt?
+
+            struct Scope: Decodable {
+                let model: Model?
+            }
+
+            struct Model: Decodable {
+                let display_name: String?
+            }
+        }
+
+        /// `resets_at` is an ISO-8601 string in the named windows but epoch seconds
+        /// in `limits`, and either could change shape; an unreadable timestamp must
+        /// not throw away the whole reading.
+        enum ResetsAt: Decodable {
+            case epoch(Double)
+            case iso(String)
+            case unreadable
+
+            init(from decoder: Decoder) throws {
+                let container = try decoder.singleValueContainer()
+                if let seconds = try? container.decode(Double.self) {
+                    self = .epoch(seconds)
+                } else if let string = try? container.decode(String.self) {
+                    self = .iso(string)
+                } else {
+                    self = .unreadable
+                }
+            }
+
+            var date: Date? {
+                switch self {
+                case .epoch(let seconds): Date(timeIntervalSince1970: seconds)
+                case .iso(let string): ISO8601.date(from: string)
+                case .unreadable: nil
+                }
+            }
         }
     }
 
@@ -172,8 +219,8 @@ public enum ClaudeUsageParser {
         }
         // Named by duration like the Codex windows, so both providers label the same
         // way and the menu bar abbreviations come from one place.
-        return [("five_hour", 300, payload.five_hour), ("seven_day", 10080, payload.seven_day)]
-            .compactMap { id, minutes, window in
+        let named = [("five_hour", 300, payload.five_hour), ("seven_day", 10080, payload.seven_day)]
+            .compactMap { id, minutes, window -> UsageWindow? in
                 guard let window, let utilization = window.utilization else { return nil }
                 return UsageWindow(
                     id: id,
@@ -182,5 +229,20 @@ public enum ClaudeUsageParser {
                     resetsAt: window.resets_at.flatMap(ISO8601.date(from:))
                 )
             }
+        let modelScoped = (payload.limits ?? [])
+            .compactMap { limit -> UsageWindow? in
+                guard limit.kind == "weekly_scoped",
+                    let modelName = limit.scope?.model?.display_name, !modelName.isEmpty,
+                    let percent = limit.percent
+                else { return nil }
+                return UsageWindow(
+                    id: "weekly_scoped_\(modelName.lowercased())",
+                    windowMinutes: 10080,
+                    modelName: modelName,
+                    usedPercent: percent,
+                    resetsAt: limit.resets_at?.date
+                )
+            }
+        return named + modelScoped
     }
 }
