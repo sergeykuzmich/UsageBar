@@ -117,13 +117,17 @@ public struct ProviderStatus: Sendable, Equatable, Identifiable {
     public let kind: ProviderKind
     public let outcome: Outcome
     public let stale: Stale?
+    /// When the provider's endpoint said how long to stay away, the moment it may be
+    /// contacted again. Fetching before then is guaranteed to fail.
+    public let retryAfter: Date?
 
     public var id: String { kind.rawValue }
 
-    public init(kind: ProviderKind, outcome: Outcome, stale: Stale? = nil) {
+    public init(kind: ProviderKind, outcome: Outcome, stale: Stale? = nil, retryAfter: Date? = nil) {
         self.kind = kind
         self.outcome = outcome
         self.stale = stale
+        self.retryAfter = retryAfter
     }
 
     public var report: ProviderReport? {

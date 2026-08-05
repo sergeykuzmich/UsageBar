@@ -185,6 +185,135 @@ struct ClaudeParserTests {
     }
 }
 
+/// Serves canned HTTP responses to `fetchWindows`. Static state, so the suite that
+/// uses it must be `.serialized`.
+final class StubURLProtocol: URLProtocol {
+    struct Canned {
+        let status: Int
+        let headers: [String: String]
+        let body: Data
+
+        init(status: Int, headers: [String: String] = [:], body: Data = Data("{}".utf8)) {
+            self.status = status
+            self.headers = headers
+            self.body = body
+        }
+    }
+
+    nonisolated(unsafe) static var queue: [Canned] = []
+    nonisolated(unsafe) static var requestCount = 0
+
+    static func session(serving responses: [Canned]) -> URLSession {
+        queue = responses
+        requestCount = 0
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        Self.requestCount += 1
+        let canned = Self.queue.isEmpty ? Canned(status: 429) : Self.queue.removeFirst()
+        let response = HTTPURLResponse(
+            url: request.url!,
+            statusCode: canned.status,
+            httpVersion: "HTTP/2",
+            headerFields: canned.headers
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: canned.body)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
+@Suite("Claude rate limiting", .serialized)
+struct ClaudeRateLimitTests {
+    static let usageBody = Data(
+        #"{"five_hour":{"utilization":4.0,"resets_at":null},"seven_day":{"utilization":16.0,"resets_at":null}}"#.utf8
+    )
+
+    /// Observed live on 2026-08-04: `retry-after: 2259`. Retrying inside the refresh
+    /// against a wait like that is guaranteed 429s, and the caller needs the date so
+    /// it can stop probing until the penalty expires.
+    @Test func aLongRetryAfterAbandonsRetriesAndCarriesTheDate() async throws {
+        let session = StubURLProtocol.session(serving: [
+            .init(status: 429, headers: ["Retry-After": "2259"])
+        ])
+
+        do {
+            _ = try await ClaudeProbe.fetchWindows(token: "t", session: session, retryDelays: [0, 0])
+            Issue.record("expected a rate limit error")
+        } catch let error as ClaudeProbeError {
+            #expect(StubURLProtocol.requestCount == 1)
+            #expect(error.message == "Claude's usage endpoint is rate limiting.")
+            let until = try #require(error.retryAfter)
+            #expect(abs(until.timeIntervalSinceNow - 2259) < 30)
+        }
+    }
+
+    /// `retry-after: 0` is what the endpoint used to send; it means the header has
+    /// nothing to say and the fixed schedule stays in charge.
+    @Test func aZeroRetryAfterKeepsTheFixedSchedule() async throws {
+        let session = StubURLProtocol.session(serving: [
+            .init(status: 429, headers: ["Retry-After": "0"]),
+            .init(status: 429, headers: ["Retry-After": "0"]),
+            .init(status: 429, headers: ["Retry-After": "0"]),
+        ])
+
+        do {
+            _ = try await ClaudeProbe.fetchWindows(token: "t", session: session, retryDelays: [0, 0])
+            Issue.record("expected a rate limit error")
+        } catch let error as ClaudeProbeError {
+            #expect(StubURLProtocol.requestCount == 3)
+            #expect(error.retryAfter == nil)
+        }
+    }
+
+    @Test func aShortRetryAfterWaitsAndThenSucceeds() async throws {
+        let session = StubURLProtocol.session(serving: [
+            .init(status: 429, headers: ["Retry-After": "1"]),
+            .init(status: 200, body: Self.usageBody),
+        ])
+
+        let windows = try await ClaudeProbe.fetchWindows(token: "t", session: session, retryDelays: [0, 0])
+
+        #expect(StubURLProtocol.requestCount == 2)
+        #expect(windows.map(\.usedPercent) == [4, 16])
+    }
+
+    /// The message is written at probe time but can be displayed an hour later, after
+    /// the cached reading it referred to was dropped. It must not describe the screen.
+    @Test func theRateLimitMessageDoesNotClaimAReadingIsShown() async throws {
+        let session = StubURLProtocol.session(serving: [
+            .init(status: 429), .init(status: 429), .init(status: 429),
+        ])
+
+        do {
+            _ = try await ClaudeProbe.fetchWindows(token: "t", session: session, retryDelays: [0, 0])
+            Issue.record("expected a rate limit error")
+        } catch let error as ClaudeProbeError {
+            #expect(!error.message.contains("Showing the last reading"))
+        }
+    }
+
+    @Test func anHttpDateRetryAfterIsUnderstood() {
+        let until = Date().addingTimeInterval(1800)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+
+        let seconds = ClaudeProbe.retryAfterSeconds(from: formatter.string(from: until))
+
+        #expect(abs((seconds ?? 0) - 1800) < 5)
+    }
+}
+
 @Suite("Presentation")
 struct PresentationTests {
     @Test(arguments: [
@@ -400,6 +529,53 @@ struct UsageStoreTests {
             MenuBarReadout.Entry(id: "five_hour", initial: "h", usedPercent: 11),
             MenuBarReadout.Entry(id: "seven_day", initial: "w", usedPercent: 24),
         ]))
+    }
+
+    /// The server named a wait; fetching before it expires is a guaranteed 429 that
+    /// only prolongs the penalty. That is also why the refresh button cannot force
+    /// through it.
+    @MainActor
+    @Test func aRetryAfterPenaltyBlocksFetchesUntilItExpires() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        let now = Date()
+        let until = now.addingTimeInterval(2259)
+        store.apply(
+            [ProviderStatus(kind: .claude, outcome: .unavailable("rate limiting"), retryAfter: until)],
+            now: now
+        )
+
+        #expect(store.fetchesToSkip(force: false, now: until.addingTimeInterval(-1)).contains(.claude))
+        #expect(store.fetchesToSkip(force: true, now: until.addingTimeInterval(-1)).contains(.claude))
+        #expect(!store.fetchesToSkip(force: true, now: until.addingTimeInterval(1)).contains(.claude))
+        #expect(!store.fetchesToSkip(force: false, now: until.addingTimeInterval(-1)).contains(.codex))
+    }
+
+    /// Relaunching during a penalty is exactly how the limit got tripped during
+    /// development, so the block has to outlive the process.
+    @MainActor
+    @Test func aRetryAfterPenaltySurvivesARelaunch() {
+        let defaults = Self.scratchDefaults(#function)
+        let until = Date().addingTimeInterval(2259)
+        let first = UsageStore(defaults: defaults)
+        first.apply([ProviderStatus(kind: .claude, outcome: .unavailable("rate limiting"), retryAfter: until)])
+
+        let relaunched = UsageStore(defaults: defaults)
+
+        #expect(relaunched.fetchesToSkip(force: true, now: until.addingTimeInterval(-1)).contains(.claude))
+        #expect(!relaunched.fetchesToSkip(force: true, now: until.addingTimeInterval(1)).contains(.claude))
+    }
+
+    @MainActor
+    @Test func aSuccessfulReadingClearsThePenalty() {
+        let defaults = Self.scratchDefaults(#function)
+        let store = UsageStore(defaults: defaults)
+        let until = Date().addingTimeInterval(2259)
+        store.apply([ProviderStatus(kind: .claude, outcome: .unavailable("rate limiting"), retryAfter: until)])
+
+        store.apply([Self.bothProviders[0]])
+
+        #expect(!store.fetchesToSkip(force: true, now: until.addingTimeInterval(-1)).contains(.claude))
+        #expect(!UsageStore(defaults: defaults).fetchesToSkip(force: true, now: until.addingTimeInterval(-1)).contains(.claude))
     }
 
     /// The usage endpoint rate-limits. Emptying the menu bar on a transient failure is

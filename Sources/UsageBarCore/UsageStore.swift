@@ -13,6 +13,7 @@ public final class UsageStore {
     public static let minFetchInterval: TimeInterval = 300
     public static let showsBothWindowsKey = "menuBarShowsBothWindows"
     static let cacheKey = "cachedReports"
+    static let blockedUntilKey = "blockedUntil"
 
     public private(set) var statuses: [ProviderStatus] = []
     public private(set) var lastRefreshed: Date?
@@ -28,6 +29,10 @@ public final class UsageStore {
 
     private let defaults: UserDefaults
     private var cache: [ProviderKind: CachedReport]
+    /// Providers the endpoint told to stay away, and until when. Persisted because
+    /// relaunching mid-penalty is exactly how the limit got tripped during
+    /// development.
+    private var blockedUntil: [ProviderKind: Date]
     private var refreshTask: Task<Void, Never>?
     private var autoRefreshTask: Task<Void, Never>?
 
@@ -42,6 +47,7 @@ public final class UsageStore {
             .flatMap(MenuBarSource.init(rawValue:)) ?? .highest
         self.showsBothWindows = defaults.bool(forKey: Self.showsBothWindowsKey)
         self.cache = Self.loadCache(from: defaults)
+        self.blockedUntil = Self.loadBlockedUntil(from: defaults)
         self.statuses = Self.statuses(fromCache: cache, now: Date())
     }
 
@@ -83,17 +89,27 @@ public final class UsageStore {
     public func refresh(force: Bool = false, now: Date = Date()) {
         guard refreshTask == nil else { return }
         isRefreshing = true
-        let fresh = force ? [] : Set(
-            cache.filter { now.timeIntervalSince($0.value.fetchedAt) < Self.minFetchInterval }.keys
-        )
+        let skipped = fetchesToSkip(force: force, now: now)
         refreshTask = Task { [weak self] in
-            async let claude = Self.probe(.claude, skipping: fresh)
-            async let codex = Self.probe(.codex, skipping: fresh)
+            async let claude = Self.probe(.claude, skipping: skipped)
+            async let codex = Self.probe(.codex, skipping: skipped)
             let results = await [claude, codex].compactMap { $0 }
             guard let self else { return }
             self.refreshTask = nil
             self.apply(results)
         }
+    }
+
+    /// A provider inside a server-named penalty stays skipped even when forced: the
+    /// server promised a 429 until then, so the refresh button would only burn a
+    /// request into a wall and prolong the penalty.
+    func fetchesToSkip(force: Bool, now: Date) -> Set<ProviderKind> {
+        var skipped = Set(blockedUntil.filter { now < $0.value }.keys)
+        guard !force else { return skipped }
+        for (kind, cached) in cache where now.timeIntervalSince(cached.fetchedAt) < Self.minFetchInterval {
+            skipped.insert(kind)
+        }
+        return skipped
     }
 
     private static func probe(_ kind: ProviderKind, skipping: Set<ProviderKind>) async -> ProviderStatus? {
@@ -108,8 +124,12 @@ public final class UsageStore {
         for result in results {
             if let report = result.report {
                 cache[result.kind] = CachedReport(report: report, fetchedAt: now)
+                blockedUntil[result.kind] = nil
+            } else if let retryAfter = result.retryAfter {
+                blockedUntil[result.kind] = retryAfter
             }
         }
+        saveBlockedUntil()
         let probed = Dictionary(uniqueKeysWithValues: results.map { ($0.kind, $0) })
         statuses = ProviderKind.allCases.compactMap { kind -> ProviderStatus? in
             // A provider skipped for being fresh keeps whatever it is already showing.
@@ -172,6 +192,23 @@ public final class UsageStore {
             guard let kind = ProviderKind(rawValue: entry.key) else { return }
             result[kind] = entry.value
         }
+    }
+
+    private static func loadBlockedUntil(from defaults: UserDefaults) -> [ProviderKind: Date] {
+        guard let data = defaults.data(forKey: blockedUntilKey),
+            let decoded = try? JSONDecoder().decode([String: Date].self, from: data)
+        else { return [:] }
+        let now = Date()
+        return decoded.reduce(into: [:]) { result, entry in
+            guard let kind = ProviderKind(rawValue: entry.key), now < entry.value else { return }
+            result[kind] = entry.value
+        }
+    }
+
+    private func saveBlockedUntil() {
+        let encodable = blockedUntil.reduce(into: [String: Date]()) { $0[$1.key.rawValue] = $1.value }
+        guard let data = try? JSONEncoder().encode(encodable) else { return }
+        defaults.set(data, forKey: Self.blockedUntilKey)
     }
 
     private func saveCache() {

@@ -23,7 +23,7 @@ public enum ClaudeProbe {
         } catch let error as ShellError {
             return unavailable(error.errorDescription ?? "\(error)")
         } catch let error as ClaudeProbeError {
-            return unavailable(error.message)
+            return ProviderStatus(kind: .claude, outcome: .unavailable(error.message), retryAfter: error.retryAfter)
         } catch {
             return unavailable(error.localizedDescription)
         }
@@ -72,12 +72,44 @@ public enum ClaudeProbe {
         throw ClaudeProbeError(message: "Could not read Claude's credentials from the keychain. Approve the access prompt, or run `claude` to sign in again.")
     }
 
-    /// The endpoint rate-limits readily and its `retry-after` comes back as `0`, so the
-    /// backoff is ours. Observed live: two 429s in a row, then a 200 on the third try
-    /// about forty seconds later.
-    static let retryDelays: [Duration] = [.seconds(3), .seconds(15)]
+    /// The endpoint used to send `retry-after: 0`, so a fixed backoff was ours to pick.
+    /// Observed live: two 429s in a row, then a 200 on the third try about forty
+    /// seconds later. When the header carries a real value it takes precedence.
+    static let retryDelays: [TimeInterval] = [3, 15]
 
-    private static func fetchWindows(token: String, session: URLSession) async throws -> [UsageWindow] {
+    /// The longest server-named wait worth sitting through inside one refresh. Waits
+    /// past this (observed live: 2259 seconds) become a `retryAfter` date instead, so
+    /// the store can stop probing until the penalty expires.
+    static let maxInRefreshWait: TimeInterval = 30
+
+    /// Deliberately silent about what the screen shows: this text is written at probe
+    /// time but can be displayed an hour later, after the cached reading it once
+    /// referred to was dropped.
+    static let rateLimitedMessage = "Claude's usage endpoint is rate limiting."
+
+    /// `Retry-After` is either delta-seconds or an RFC 1123 date. Zero or negative
+    /// means the header has nothing to say; the endpoint sent `0` for a long time.
+    static func retryAfterSeconds(from header: String) -> TimeInterval? {
+        let trimmed = header.trimmingCharacters(in: .whitespaces)
+        let seconds: TimeInterval?
+        if let numeric = TimeInterval(trimmed) {
+            seconds = numeric
+        } else {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.timeZone = TimeZone(identifier: "GMT")
+            formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+            seconds = formatter.date(from: trimmed)?.timeIntervalSinceNow
+        }
+        guard let seconds, seconds > 0 else { return nil }
+        return seconds
+    }
+
+    static func fetchWindows(
+        token: String,
+        session: URLSession,
+        retryDelays: [TimeInterval] = ClaudeProbe.retryDelays
+    ) async throws -> [UsageWindow] {
         var request = URLRequest(url: usageEndpoint)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
@@ -92,23 +124,40 @@ public enum ClaudeProbe {
                 return try ClaudeUsageParser.windows(from: data)
             case 401, 403:
                 throw ClaudeProbeError(message: "Claude's saved token was rejected. Run `claude` once to refresh it.")
-            case 429 where attempt < retryDelays.count:
-                try? await Task.sleep(for: retryDelays[attempt])
             case 429:
-                throw ClaudeProbeError(message: "Claude's usage endpoint is rate limiting. Showing the last reading.")
+                let wait = (response as? HTTPURLResponse)?
+                    .value(forHTTPHeaderField: "Retry-After")
+                    .flatMap(retryAfterSeconds(from:))
+                if let wait, wait > maxInRefreshWait {
+                    throw ClaudeProbeError(
+                        message: rateLimitedMessage,
+                        retryAfter: Date(timeIntervalSinceNow: wait)
+                    )
+                }
+                guard attempt < retryDelays.count else {
+                    throw ClaudeProbeError(
+                        message: rateLimitedMessage,
+                        retryAfter: wait.map { Date(timeIntervalSinceNow: $0) }
+                    )
+                }
+                try? await Task.sleep(for: .seconds(max(retryDelays[attempt], wait ?? 0)))
             default:
                 throw ClaudeProbeError(message: "Claude usage request failed (HTTP \(status)).")
             }
         }
-        throw ClaudeProbeError(message: "Claude's usage endpoint is rate limiting. Showing the last reading.")
+        throw ClaudeProbeError(message: rateLimitedMessage)
     }
 }
 
 public struct ClaudeProbeError: Error, Equatable {
     public let message: String
+    /// When the endpoint said how long to stay away, the moment it may be contacted
+    /// again. Requests before then are guaranteed 429s.
+    public let retryAfter: Date?
 
-    public init(message: String) {
+    public init(message: String, retryAfter: Date? = nil) {
         self.message = message
+        self.retryAfter = retryAfter
     }
 }
 
