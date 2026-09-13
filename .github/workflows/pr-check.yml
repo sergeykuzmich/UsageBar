@@ -1,0 +1,54 @@
+name: pr-check
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift test
+
+  lint:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift build -Xswiftc -warnings-as-errors
+
+  format:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: swift format lint --strict --recursive Sources Tests Package.swift
+
+  build:
+    uses: ./.github/workflows/build.yml
+    with:
+      artifact-name: UsageBar-pr-${{ github.event.pull_request.number }}
+
+  comment:
+    needs: build
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: macos-latest
+    steps:
+      - name: Link build from pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}#artifacts
+        run: |
+          marker='<!-- usagebar-pr-build -->'
+          body="$marker
+          The latest UsageBar PR build is available in the [workflow artifacts]($RUN_URL) for 7 days."
+          comment_id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" --paginate \
+            --jq ".[] | select(.body | contains(\"$marker\")) | .id" | head -1)"
+          if [[ -n "$comment_id" ]]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$comment_id" -f body="$body"
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" -f body="$body"
+          fi
