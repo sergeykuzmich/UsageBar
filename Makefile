@@ -33,6 +33,17 @@ build: ## Build an arm64 release app
 	mkdir -p "$(APP_DIR)/Contents/MacOS" "$(APP_DIR)/Contents/Resources"; \
 	cp "$$bin_path/$(BINARY)" "$(APP_DIR)/Contents/MacOS/$(BINARY)"; \
 	cp Support/Info.plist "$(APP_DIR)/Contents/Info.plist"; \
+	origin_url="$$(git remote get-url origin 2>/dev/null || true)"; \
+	repository=""; \
+	origin_url="$${origin_url%.git}"; \
+	if [[ "$${origin_url}" =~ ^https://github\.com/([^/]+/[^/]+)$$ ]]; then \
+		repository="$${BASH_REMATCH[1]}"; \
+	elif [[ "$${origin_url}" =~ ^git@github\.com:([^/]+/[^/]+)$$ ]]; then \
+		repository="$${BASH_REMATCH[1]}"; \
+	fi; \
+	if [[ -n "$${repository}" ]]; then \
+		/usr/libexec/PlistBuddy -c "Add :UsageBarUpdateRepository string $${repository}" "$(APP_DIR)/Contents/Info.plist"; \
+	fi; \
 	if [[ -n "$(USAGEBAR_VERSION)" ]]; then \
 		/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(USAGEBAR_VERSION)" "$(APP_DIR)/Contents/Info.plist"; \
 		/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $(USAGEBAR_VERSION)" "$(APP_DIR)/Contents/Info.plist"; \
