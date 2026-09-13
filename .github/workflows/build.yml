@@ -17,8 +17,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build universal app
-        run: ./scripts/build-app.sh --universal
+      - name: Build arm64 app
+        run: make build
 
       - name: Package app
         run: ditto -c -k --keepParent dist/UsageBar.app dist/UsageBar.zip

@@ -16,19 +16,19 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      - run: swift test
+      - run: make test
 
   lint:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      - run: swift build -Xswiftc -warnings-as-errors
+      - run: make lint
 
   format:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
-      - run: swift format lint --strict --recursive Sources Tests Package.swift
+      - run: make format-check
 
   build:
     uses: ./.github/workflows/build.yml
