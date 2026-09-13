@@ -15,8 +15,9 @@ public enum ClaudeProbe {
           "Signed in with \(auth.authMethod ?? "an API key"), which has no subscription limits.")
       }
 
-      let token = try await offMainActor { try readAccessToken() }
-      let windows = try await fetchWindows(token: token, session: session)
+      let windows = try await fetchWindows(session: session) {
+        try await offMainActor { try readAccessToken() }
+      }
       guard !windows.isEmpty else {
         return unavailable("No usage limits reported for this account.")
       }
@@ -121,21 +122,37 @@ public enum ClaudeProbe {
     session: URLSession,
     retryDelays: [TimeInterval] = ClaudeProbe.retryDelays
   ) async throws -> [UsageWindow] {
+    try await fetchWindows(session: session, retryDelays: retryDelays) { token }
+  }
+
+  static func fetchWindows(
+    session: URLSession,
+    retryDelays: [TimeInterval] = ClaudeProbe.retryDelays,
+    readToken: () async throws -> String
+  ) async throws -> [UsageWindow] {
+    var token = try await readToken()
+    var refreshedToken = false
     var request = URLRequest(url: usageEndpoint)
     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
     request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
     request.setValue("application/json", forHTTPHeaderField: "Accept")
     request.timeoutInterval = 20
 
-    for attempt in 0...retryDelays.count {
+    var attempt = 0
+    while attempt <= retryDelays.count {
       let (data, response) = try await session.data(for: request)
       let status = (response as? HTTPURLResponse)?.statusCode ?? 0
       switch status {
       case 200:
         return try ClaudeUsageParser.windows(from: data)
       case 401, 403:
-        throw ClaudeProbeError(
-          message: "Claude's saved token was rejected. Run `claude` once to refresh it.")
+        guard !refreshedToken else {
+          throw ClaudeProbeError(
+            message: "Claude's saved token was rejected. Run `claude` once to refresh it.")
+        }
+        token = try await readToken()
+        request.setValue("******", forHTTPHeaderField: "Authorization")
+        refreshedToken = true
       case 429:
         let wait = (response as? HTTPURLResponse)?
           .value(forHTTPHeaderField: "Retry-After")
@@ -153,6 +170,7 @@ public enum ClaudeProbe {
           )
         }
         try? await Task.sleep(for: .seconds(max(retryDelays[attempt], wait ?? 0)))
+        attempt += 1
       default:
         throw ClaudeProbeError(message: "Claude usage request failed (HTTP \(status)).")
       }

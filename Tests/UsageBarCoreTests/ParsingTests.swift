@@ -305,6 +305,43 @@ struct ClaudeRateLimitTests {
     }
   }
 
+  @Test func aRejectedTokenIsReadAgainAndRetriedOnce() async throws {
+    let session = StubURLProtocol.session(serving: [
+      .init(status: 401),
+      .init(status: 200, body: Self.usageBody),
+    ])
+    var tokens = ["stale", "fresh"]
+
+    let windows = try await ClaudeProbe.fetchWindows(session: session, retryDelays: []) {
+      tokens.removeFirst()
+    }
+
+    #expect(tokens.isEmpty)
+    #expect(StubURLProtocol.requestCount == 2)
+    #expect(windows.map(\.usedPercent) == [4, 16])
+  }
+
+  @Test func aTokenRejectedTwiceIsNotRetriedAgain() async throws {
+    let session = StubURLProtocol.session(serving: [
+      .init(status: 401),
+      .init(status: 403),
+      .init(status: 200, body: Self.usageBody),
+    ])
+    var tokens = ["stale", "still-stale", "unused"]
+
+    do {
+      _ = try await ClaudeProbe.fetchWindows(session: session, retryDelays: []) {
+        tokens.removeFirst()
+      }
+      Issue.record("expected an authentication error")
+    } catch let error as ClaudeProbeError {
+      #expect(
+        error.message == "Claude's saved token was rejected. Run `claude` once to refresh it.")
+      #expect(tokens == ["unused"])
+      #expect(StubURLProtocol.requestCount == 2)
+    }
+  }
+
   @Test func anHttpDateRetryAfterIsUnderstood() {
     let until = Date().addingTimeInterval(1800)
     let formatter = DateFormatter()
