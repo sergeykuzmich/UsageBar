@@ -335,7 +335,8 @@ struct ClaudeRateLimitTests {
       }
       Issue.record("expected an authentication error")
     } catch let error as ClaudeProbeError {
-      #expect(error.message == "Claude's saved token was rejected. Run `claude` once to refresh it.")
+      #expect(
+        error.message == "Claude's saved token was rejected. Run `claude` once to refresh it.")
       #expect(tokens == ["unused"])
       #expect(StubURLProtocol.requestCount == 2)
     }
