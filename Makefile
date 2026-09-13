@@ -33,16 +33,83 @@ build: ## Build an arm64 release app
 	mkdir -p "$(APP_DIR)/Contents/MacOS" "$(APP_DIR)/Contents/Resources"; \
 	cp "$$bin_path/$(BINARY)" "$(APP_DIR)/Contents/MacOS/$(BINARY)"; \
 	cp Support/Info.plist "$(APP_DIR)/Contents/Info.plist"; \
+	is_ascii_alnum() { \
+		case "$$1" in \
+			[A-Za-z0-9]) return 0 ;; \
+			*) return 1 ;; \
+		esac; \
+	}; \
+	is_canonical_owner() { \
+		local value="$$1"; \
+		local size=$${#value}; \
+		(( size >= 1 && size <= 39 )) || return 1; \
+		local first="$${value:0:1}"; \
+		local last="$${value:$$(($${#value} - 1)):1}"; \
+		is_ascii_alnum "$$first" || return 1; \
+		is_ascii_alnum "$$last" || return 1; \
+		local previous_separator=0; \
+		local char=""; \
+		for ((i = 0; i < size; i++)); do \
+			char="$${value:$$i:1}"; \
+			if is_ascii_alnum "$$char"; then \
+				previous_separator=0; \
+				continue; \
+			fi; \
+			if [[ "$$char" == "-" ]]; then \
+				if (( previous_separator == 1 )); then return 1; fi; \
+				previous_separator=1; \
+				continue; \
+			fi; \
+			return 1; \
+		done; \
+		return 0; \
+	}; \
+	is_canonical_repository() { \
+		local value="$$1"; \
+		local size=$${#value}; \
+		(( size >= 1 && size <= 100 )) || return 1; \
+		local first="$${value:0:1}"; \
+		local last="$${value:$$(($${#value} - 1)):1}"; \
+		is_ascii_alnum "$$first" || return 1; \
+		is_ascii_alnum "$$last" || return 1; \
+		local previous_separator=0; \
+		local char=""; \
+		for ((i = 0; i < size; i++)); do \
+			char="$${value:$$i:1}"; \
+			if is_ascii_alnum "$$char"; then \
+				previous_separator=0; \
+				continue; \
+			fi; \
+			if [[ "$$char" == "-" || "$$char" == "_" || "$$char" == "." ]]; then \
+				if (( previous_separator == 1 )); then return 1; fi; \
+				previous_separator=1; \
+				continue; \
+			fi; \
+			return 1; \
+		done; \
+		return 0; \
+	}; \
+	normalize_github_origin() { \
+		local origin_url="$$1"; \
+		local owner=""; \
+		local repository=""; \
+		if [[ "$$origin_url" =~ ^https://github\.com/([^[:space:]/]+)/([^/?#[:space:]]+)(\.git)?$$ ]]; then \
+			owner="$${BASH_REMATCH[1]}"; \
+			repository="$${BASH_REMATCH[2]}"; \
+		elif [[ "$$origin_url" =~ ^git@github\.com:([^[:space:]/]+)/([^/?#[:space:]]+)(\.git)?$$ ]]; then \
+			owner="$${BASH_REMATCH[1]}"; \
+			repository="$${BASH_REMATCH[2]}"; \
+		else \
+			return 1; \
+		fi; \
+		repository="$${repository%.git}"; \
+		is_canonical_owner "$$owner" || return 1; \
+		is_canonical_repository "$$repository" || return 1; \
+		echo "$$owner/$$repository"; \
+	}; \
 	origin_url="$$(git remote get-url origin 2>/dev/null || true)"; \
-	repository=""; \
-	origin_url="$${origin_url%.git}"; \
-	if [[ "$${origin_url}" =~ ^https://github\.com/([^/]+/[^/]+)$$ ]]; then \
-		repository="$${BASH_REMATCH[1]}"; \
-	elif [[ "$${origin_url}" =~ ^git@github\.com:([^/]+/[^/]+)$$ ]]; then \
-		repository="$${BASH_REMATCH[1]}"; \
-	fi; \
-	if [[ -n "$${repository}" ]]; then \
-		/usr/libexec/PlistBuddy -c "Add :UsageBarUpdateRepository string $${repository}" "$(APP_DIR)/Contents/Info.plist"; \
+	if normalized_repository="$$(normalize_github_origin "$$origin_url")"; then \
+		/usr/libexec/PlistBuddy -c "Add :UsageBarUpdateRepository string $$normalized_repository" "$(APP_DIR)/Contents/Info.plist"; \
 	fi; \
 	if [[ -n "$(USAGEBAR_VERSION)" ]]; then \
 		/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $(USAGEBAR_VERSION)" "$(APP_DIR)/Contents/Info.plist"; \
