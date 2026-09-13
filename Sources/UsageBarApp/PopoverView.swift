@@ -172,6 +172,16 @@ private struct FooterView: View {
     )
   }
 
+  private func providerBinding(_ provider: ProviderKind) -> Binding<Bool> {
+    Binding(
+      get: { store.enabledProviders.contains(provider) },
+      set: { enabled in
+        store.setProvider(provider, enabled: enabled)
+        if enabled { store.refresh(force: true) }
+      }
+    )
+  }
+
   var body: some View {
     HStack(spacing: 8) {
       Text(store.lastRefreshed.map { RelativeTime.sinceUpdate($0) } ?? "not checked yet")
@@ -197,11 +207,22 @@ private struct FooterView: View {
           Divider()
         }
         Picker("Show in Menu Bar", selection: $store.menuBarSource) {
-          ForEach(MenuBarSource.allCases) { source in
+          ForEach(
+            MenuBarSource.allCases.filter { source in
+              source.providerKind.map(store.enabledProviders.contains) ?? true
+            }
+          ) { source in
             Text(source.title).tag(source)
           }
         }
         .pickerStyle(.inline)
+        Divider()
+        Section("Providers") {
+          ForEach(ProviderKind.allCases) { provider in
+            Toggle(provider.displayName, isOn: providerBinding(provider))
+              .disabled(store.enabledProviders == [provider])
+          }
+        }
         Divider()
         Toggle("Show Both Windows", isOn: $store.showsBothWindows)
           .disabled(store.menuBarSource == .highest)
