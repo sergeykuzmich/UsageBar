@@ -12,6 +12,24 @@ on:
         required: false
         default: ""
         type: string
+      notarize:
+        description: Sign with Developer ID and notarize the DMG
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      DEVELOPER_ID_CERTIFICATE_BASE64:
+        required: false
+      DEVELOPER_ID_CERTIFICATE_PASSWORD:
+        required: false
+      DEVELOPER_ID_APPLICATION_IDENTITY:
+        required: false
+      APP_STORE_CONNECT_API_KEY_BASE64:
+        required: false
+      APP_STORE_CONNECT_API_KEY_ID:
+        required: false
+      APP_STORE_CONNECT_API_ISSUER_ID:
+        required: false
 
 permissions:
   contents: read
@@ -22,18 +40,132 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Import release credentials
+        if: inputs.notarize
+        env:
+          DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_CERTIFICATE_BASE64 }}
+          DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          DEVELOPER_ID_APPLICATION_IDENTITY: ${{ secrets.DEVELOPER_ID_APPLICATION_IDENTITY }}
+          APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          : "${DEVELOPER_ID_CERTIFICATE_BASE64:?missing Developer ID certificate}"
+          : "${DEVELOPER_ID_CERTIFICATE_PASSWORD:?missing Developer ID certificate password}"
+          : "${DEVELOPER_ID_APPLICATION_IDENTITY:?missing Developer ID application identity}"
+          : "${APP_STORE_CONNECT_API_KEY_BASE64:?missing App Store Connect API key}"
+          : "${APP_STORE_CONNECT_API_KEY_ID:?missing App Store Connect API key ID}"
+          : "${APP_STORE_CONNECT_API_ISSUER_ID:?missing App Store Connect API issuer ID}"
+
+          keychain_path="$RUNNER_TEMP/usagebar-signing.keychain-db"
+          certificate_path="$RUNNER_TEMP/developer-id.p12"
+          api_key_path="$RUNNER_TEMP/AuthKey.p8"
+          original_keychains_path="$RUNNER_TEMP/usagebar-keychains.txt"
+          keychain_password="$(openssl rand -base64 32)"
+
+          security list-keychains -d user > "$original_keychains_path"
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          original_keychains=()
+          while IFS= read -r keychain; do
+            keychain="${keychain#"${keychain%%[![:space:]]*}"}"
+            original_keychains+=("${keychain//\"/}")
+          done < "$original_keychains_path"
+          security list-keychains -d user -s "$keychain_path" "${original_keychains[@]}"
+
+          printf '%s' "$DEVELOPER_ID_CERTIFICATE_BASE64" | base64 --decode > "$certificate_path"
+          security import "$certificate_path" -k "$keychain_path" \
+            -P "$DEVELOPER_ID_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s \
+            -k "$keychain_password" "$keychain_path"
+          printf '%s' "$APP_STORE_CONNECT_API_KEY_BASE64" | base64 --decode > "$api_key_path"
+
+          {
+            echo "SIGNING_KEYCHAIN_PATH=$keychain_path"
+            echo "SIGNING_CERTIFICATE_PATH=$certificate_path"
+            echo "NOTARY_API_KEY_PATH=$api_key_path"
+            echo "ORIGINAL_KEYCHAINS_PATH=$original_keychains_path"
+          } >> "$GITHUB_ENV"
+
       - name: Build arm64 app
         env:
           RELEASE_VERSION: ${{ inputs.version }}
         run: make build USAGEBAR_VERSION="${RELEASE_VERSION#v}"
 
-      - name: Package app
-        run: ditto -c -k --keepParent dist/UsageBar.app dist/UsageBar.zip
+      - name: Sign release app
+        if: inputs.notarize
+        env:
+          DEVELOPER_ID_APPLICATION_IDENTITY: ${{ secrets.DEVELOPER_ID_APPLICATION_IDENTITY }}
+        run: |
+          set -euo pipefail
+          codesign --force --options runtime --timestamp \
+            --sign "$DEVELOPER_ID_APPLICATION_IDENTITY" dist/UsageBar.app
+          codesign --verify --deep --strict --verbose=2 dist/UsageBar.app
+          codesign -dvv dist/UsageBar.app
+
+      - name: Create DMG
+        run: |
+          rm -f dist/UsageBar.dmg
+          hdiutil create \
+            -volname UsageBar \
+            -srcfolder dist/UsageBar.app \
+            -ov \
+            -format UDZO \
+            dist/UsageBar.dmg
+
+      - name: Notarize DMG
+        if: inputs.notarize
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          xcrun notarytool submit dist/UsageBar.dmg \
+            --key "$NOTARY_API_KEY_PATH" \
+            --key-id "$APP_STORE_CONNECT_API_KEY_ID" \
+            --issuer "$APP_STORE_CONNECT_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple dist/UsageBar.dmg
+          xcrun stapler validate dist/UsageBar.dmg
+          spctl --assess --type open --context context:primary-signature \
+            --verbose=2 dist/UsageBar.dmg
+
+      - name: Verify notarized app
+        if: inputs.notarize
+        run: |
+          set -euo pipefail
+          mount_path="$RUNNER_TEMP/usagebar-dmg"
+          mkdir -p "$mount_path"
+          trap 'hdiutil detach "$mount_path" >/dev/null 2>&1 || true' EXIT
+          hdiutil attach dist/UsageBar.dmg -mountpoint "$mount_path" -nobrowse -readonly
+          codesign --verify --deep --strict --verbose=2 "$mount_path/UsageBar.app"
+          spctl --assess --type execute --verbose=2 "$mount_path/UsageBar.app"
 
       - name: Upload app
         uses: actions/upload-artifact@v7
         with:
           name: ${{ inputs.artifact-name }}
-          path: dist/UsageBar.zip
+          path: dist/UsageBar.dmg
           if-no-files-found: error
           retention-days: 7
+
+      - name: Clean release credentials
+        if: always() && inputs.notarize
+        run: |
+          set -euo pipefail
+          rm -f "$RUNNER_TEMP/developer-id.p12" "$RUNNER_TEMP/AuthKey.p8"
+
+          original_keychains_path="$RUNNER_TEMP/usagebar-keychains.txt"
+          if [[ -f "$original_keychains_path" ]]; then
+            original_keychains=()
+            while IFS= read -r keychain; do
+              keychain="${keychain#"${keychain%%[![:space:]]*}"}"
+              original_keychains+=("${keychain//\"/}")
+            done < "$original_keychains_path"
+            security list-keychains -d user -s "${original_keychains[@]}"
+          fi
+
+          security delete-keychain "$RUNNER_TEMP/usagebar-signing.keychain-db" 2>/dev/null || true
+          rm -f "$original_keychains_path"
