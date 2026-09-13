@@ -20,6 +20,11 @@ final class Updater {
   }
 
   func startChecking() {
+    guard Bundle.main.usageBarUpdateRepository != nil else {
+      failure = nil
+      return
+    }
+
     checkTask?.cancel()
     checkTask = Task { [weak self] in
       while !Task.isCancelled {
@@ -30,8 +35,13 @@ final class Updater {
   }
 
   func check() async {
+    guard let repository = Bundle.main.usageBarUpdateRepository else {
+      failure = nil
+      return
+    }
+
     do {
-      let latest = try await AppUpdate.fetchLatest()
+      let latest = try await AppUpdate.fetchLatest(repository: repository)
       available = latest.version > currentVersion ? latest : nil
       failure = nil
     } catch {

@@ -87,8 +87,24 @@ struct AppUpdateTests {
 
   @Test(arguments: [
     "", "owner", "/owner", "owner/", "owner//repo", "owner/repo/extra", "owner//", "/",
+    " owner/repo", "owner /repo", "owner/repo ", "foo..bar", "foo--bar", "owner/repo-",
+    "-owner/repo",
+    "owner/repo_", "owner/repo?x=y", "owner/re/po", "owner/../repo",
+    "owner//../po",
   ])
   func rejectsInvalidRepositoryStrings(repository: String) {
     #expect(AppUpdate.latestReleaseEndpoint(repository: repository) == nil)
+  }
+
+  @Test func rejectsDotPathRepositoryStrings() {
+    #expect(AppUpdate.latestReleaseEndpoint(repository: "owner/.repo") == nil)
+    #expect(AppUpdate.latestReleaseEndpoint(repository: "owner/../repo") == nil)
+  }
+
+  @Test func acceptsGitHubLikeCanonicalRepository() {
+    #expect(
+      AppUpdate.latestReleaseEndpoint(repository: "or-gane/UsageBar-01")
+        == URL(string: "https://api.github.com/repos/or-gane/UsageBar-01/releases/latest")
+    )
   }
 }

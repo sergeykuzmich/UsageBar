@@ -62,6 +62,81 @@ public enum AppUpdate {
     public var errorDescription: String? { message }
   }
 
+  private static let maxOwnerLength = 39
+  private static let maxRepositoryLength = 100
+
+  private static func isASCIIAlphanumeric(_ character: Character) -> Bool {
+    guard
+      character.unicodeScalars.count == 1,
+      let scalar = character.unicodeScalars.first,
+      scalar.value < 128
+    else {
+      return false
+    }
+
+    return CharacterSet.alphanumerics.contains(scalar)
+  }
+
+  private static func isCanonicalOwner(_ value: Substring) -> Bool {
+    guard !value.isEmpty, value.count <= maxOwnerLength else { return false }
+    guard
+      let first = value.first,
+      let last = value.last,
+      isASCIIAlphanumeric(first),
+      isASCIIAlphanumeric(last)
+    else {
+      return false
+    }
+
+    var previousCharacterWasSeparator = false
+    for character in value {
+      if isASCIIAlphanumeric(character) {
+        previousCharacterWasSeparator = false
+        continue
+      }
+
+      if character == "-" {
+        if previousCharacterWasSeparator { return false }
+        previousCharacterWasSeparator = true
+        continue
+      }
+
+      return false
+    }
+
+    return true
+  }
+
+  private static func isCanonicalRepository(_ value: Substring) -> Bool {
+    guard !value.isEmpty, value.count <= maxRepositoryLength else { return false }
+    guard
+      let first = value.first,
+      let last = value.last,
+      isASCIIAlphanumeric(first),
+      isASCIIAlphanumeric(last)
+    else {
+      return false
+    }
+
+    var previousCharacterWasSeparator = false
+    for character in value {
+      if isASCIIAlphanumeric(character) {
+        previousCharacterWasSeparator = false
+        continue
+      }
+
+      if character == "-" || character == "_" || character == "." {
+        if previousCharacterWasSeparator { return false }
+        previousCharacterWasSeparator = true
+        continue
+      }
+
+      return false
+    }
+
+    return true
+  }
+
   private struct Payload: Decodable {
     struct Asset: Decodable {
       let name: String
@@ -72,6 +147,7 @@ public enum AppUpdate {
         case browserDownloadURL = "browser_download_url"
       }
     }
+
     let tagName: String
     let assets: [Asset]
 
@@ -92,21 +168,20 @@ public enum AppUpdate {
       throw ParseError(message: "Release \(payload.tagName) has no \(assetName).")
     }
     return AppRelease(
-      version: version, tag: payload.tagName, downloadURL: asset.browserDownloadURL)
-  }
-
-  @available(*, deprecated, message: "Use fetchLatest(repository:session:) instead")
-  public static func fetchLatest(
-    session: URLSession = .shared
-  ) async throws -> AppRelease {
-    return try await fetchLatest(repository: "", session: session)
+      version: version,
+      tag: payload.tagName,
+      downloadURL: asset.browserDownloadURL
+    )
   }
 
   public static func latestReleaseEndpoint(repository: String) -> URL? {
-    let components =
-      repository
-      .split(separator: "/", omittingEmptySubsequences: false)
-    guard components.count == 2, !components[0].isEmpty, !components[1].isEmpty else {
+    let components = repository.split(separator: "/", omittingEmptySubsequences: false)
+
+    guard
+      components.count == 2,
+      isCanonicalOwner(components[0]),
+      isCanonicalRepository(components[1])
+    else {
       return nil
     }
 
