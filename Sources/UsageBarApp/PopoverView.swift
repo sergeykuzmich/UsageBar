@@ -175,7 +175,10 @@ private struct FooterView: View {
     private func providerBinding(_ provider: ProviderKind) -> Binding<Bool> {
         Binding(
             get: { store.enabledProviders.contains(provider) },
-            set: { store.setProvider(provider, enabled: $0) }
+            set: { enabled in
+                store.setProvider(provider, enabled: enabled)
+                if enabled { store.refresh(force: true) }
+            }
         )
     }
 

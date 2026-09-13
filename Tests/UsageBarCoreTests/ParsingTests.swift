@@ -418,6 +418,18 @@ struct UsageStoreTests {
     }
 
     @MainActor
+    @Test func reEnablingDoesNotShowAnExpiredReading() {
+        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+        let fetchedAt = Date().addingTimeInterval(-UsageStore.staleLimit - 1)
+        store.apply(Self.bothProviders, now: fetchedAt)
+        store.setProvider(.codex, enabled: false)
+
+        store.setProvider(.codex, enabled: true)
+
+        #expect(store.available.map(\.kind) == [.claude])
+    }
+
+    @MainActor
     @Test func disablingThePinnedProviderFallsBackToHighest() {
         let store = UsageStore(defaults: Self.scratchDefaults(#function))
         store.menuBarSource = .codex

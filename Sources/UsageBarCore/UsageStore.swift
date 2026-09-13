@@ -64,11 +64,23 @@ public final class UsageStore {
         statuses.filter { enabledProviders.contains($0.kind) && $0.report == nil }
     }
 
-    public func setProvider(_ kind: ProviderKind, enabled: Bool) {
+    public func setProvider(_ kind: ProviderKind, enabled: Bool, now: Date = Date()) {
         if enabled {
-            enabledProviders.insert(kind)
+            let inserted = enabledProviders.insert(kind).inserted
+            if inserted {
+                statuses.removeAll { $0.kind == kind }
+            }
+            if inserted, let cached = cache[kind], now.timeIntervalSince(cached.fetchedAt) < Self.staleLimit {
+                statuses.append(ProviderStatus(
+                    kind: kind,
+                    outcome: .report(cached.report),
+                    stale: ProviderStatus.Stale(since: cached.fetchedAt, reason: "Not refreshed yet.")
+                ))
+                statuses.sort { $0.kind.id < $1.kind.id }
+            }
         } else if enabledProviders.count > 1 {
             enabledProviders.remove(kind)
+            statuses.removeAll { $0.kind == kind }
             if menuBarSource.providerKind == kind { menuBarSource = .highest }
         }
         defaults.set(enabledProviders.map(\.rawValue), forKey: Self.enabledProvidersKey)
