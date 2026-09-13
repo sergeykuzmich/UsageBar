@@ -15,6 +15,7 @@ help: ## Show available commands
 
 test: ## Run tests
 	swift test
+	Tests/BuildMetadataTests.sh
 
 lint: ## Treat compiler warnings as errors
 	swift build -Xswiftc -warnings-as-errors
@@ -68,21 +69,11 @@ build: ## Build an arm64 release app
 		local value="$$1"; \
 		local size=$${#value}; \
 		(( size >= 1 && size <= 100 )) || return 1; \
-		local first="$${value:0:1}"; \
-		local last="$${value:$$(($${#value} - 1)):1}"; \
-		is_ascii_alnum "$$first" || return 1; \
-		is_ascii_alnum "$$last" || return 1; \
-		local previous_separator=0; \
+		[[ "$$value" != "." && "$$value" != ".." ]] || return 1; \
 		local char=""; \
 		for ((i = 0; i < size; i++)); do \
 			char="$${value:$$i:1}"; \
-			if is_ascii_alnum "$$char"; then \
-				previous_separator=0; \
-				continue; \
-			fi; \
-			if [[ "$$char" == "-" || "$$char" == "_" || "$$char" == "." ]]; then \
-				if (( previous_separator == 1 )); then return 1; fi; \
-				previous_separator=1; \
+			if is_ascii_alnum "$$char" || [[ "$$char" == "-" || "$$char" == "_" || "$$char" == "." ]]; then \
 				continue; \
 			fi; \
 			return 1; \

@@ -108,33 +108,18 @@ public enum AppUpdate {
   }
 
   private static func isCanonicalRepository(_ value: Substring) -> Bool {
-    guard !value.isEmpty, value.count <= maxRepositoryLength else { return false }
     guard
-      let first = value.first,
-      let last = value.last,
-      isASCIIAlphanumeric(first),
-      isASCIIAlphanumeric(last)
+      !value.isEmpty,
+      value.count <= maxRepositoryLength,
+      value != ".",
+      value != ".."
     else {
       return false
     }
 
-    var previousCharacterWasSeparator = false
-    for character in value {
-      if isASCIIAlphanumeric(character) {
-        previousCharacterWasSeparator = false
-        continue
-      }
-
-      if character == "-" || character == "_" || character == "." {
-        if previousCharacterWasSeparator { return false }
-        previousCharacterWasSeparator = true
-        continue
-      }
-
-      return false
+    return value.allSatisfy {
+      isASCIIAlphanumeric($0) || $0 == "-" || $0 == "_" || $0 == "."
     }
-
-    return true
   }
 
   private struct Payload: Decodable {

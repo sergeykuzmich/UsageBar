@@ -87,18 +87,22 @@ struct AppUpdateTests {
 
   @Test(arguments: [
     "", "owner", "/owner", "owner/", "owner//repo", "owner/repo/extra", "owner//", "/",
-    " owner/repo", "owner /repo", "owner/repo ", "foo..bar", "foo--bar", "owner/repo-",
-    "-owner/repo",
-    "owner/repo_", "owner/repo?x=y", "owner/re/po", "owner/../repo",
+    " owner/repo", "owner /repo", "owner/repo ", "-owner/repo", "owner/repo?x=y",
+    "owner/repo#fragment", "owner/re/po", "owner/.", "owner/..", "owner/../repo",
     "owner//../po",
   ])
   func rejectsInvalidRepositoryStrings(repository: String) {
     #expect(AppUpdate.latestReleaseEndpoint(repository: repository) == nil)
   }
 
-  @Test func rejectsDotPathRepositoryStrings() {
-    #expect(AppUpdate.latestReleaseEndpoint(repository: "owner/.repo") == nil)
-    #expect(AppUpdate.latestReleaseEndpoint(repository: "owner/../repo") == nil)
+  @Test(arguments: [
+    "github/.github", "981011512/--", "owner/foo--bar", "owner/foo..bar", "owner/repo-",
+    "owner/repo_",
+  ])
+  func acceptsGitHubRepositoryNamesInAnyPlacement(repository: String) {
+    let endpoint = AppUpdate.latestReleaseEndpoint(repository: repository)
+
+    #expect(endpoint?.path == "/repos/\(repository)/releases/latest")
   }
 
   @Test func acceptsGitHubLikeCanonicalRepository() {
