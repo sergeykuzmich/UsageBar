@@ -33,7 +33,7 @@ To remove it, quit the app and delete `UsageBar.app`.
 
 ## What it shows
 
-Both CLIs are probed independently. Whichever ones answer get a section; if neither answers, the popover says why for each.
+Both CLIs are enabled and probed independently by default. Under **⋯ → Providers**, disable either Claude Code or Codex to stop probing and hide it from the popover; at least one stays enabled. Whichever enabled providers answer get a section, and the popover explains why an enabled provider is unavailable.
 
 - **Claude Code** — the 5-hour and weekly windows of your Claude.ai subscription.
 - **Codex** — whichever windows your ChatGPT plan reports. Paid plans have a 5-hour and a weekly window; free accounts have a single monthly one.

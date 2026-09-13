@@ -12,6 +12,7 @@ public final class UsageStore {
   /// enough that relaunching the app in a loop is sufficient to trip it.
   public static let minFetchInterval: TimeInterval = 300
   public static let showsBothWindowsKey = "menuBarShowsBothWindows"
+    public static let enabledProvidersKey = "enabledProviders"
   static let cacheKey = "cachedReports"
   static let blockedUntilKey = "blockedUntil"
 
@@ -26,6 +27,8 @@ public final class UsageStore {
   public var showsBothWindows: Bool {
     didSet { defaults.set(showsBothWindows, forKey: Self.showsBothWindowsKey) }
   }
+
+    public private(set) var enabledProviders: Set<ProviderKind>
 
   private let defaults: UserDefaults
   private var cache: [ProviderKind: CachedReport]
@@ -47,17 +50,28 @@ public final class UsageStore {
       defaults.string(forKey: MenuBarSource.defaultsKey)
       .flatMap(MenuBarSource.init(rawValue:)) ?? .highest
     self.showsBothWindows = defaults.bool(forKey: Self.showsBothWindowsKey)
+        self.enabledProviders = Self.loadEnabledProviders(from: defaults)
     self.cache = Self.loadCache(from: defaults)
     self.blockedUntil = Self.loadBlockedUntil(from: defaults)
     self.statuses = Self.statuses(fromCache: cache, now: Date())
   }
 
   public var available: [ProviderStatus] {
-    statuses.filter { $0.report != nil }
+        statuses.filter { enabledProviders.contains($0.kind) && $0.report != nil }
   }
 
   public var unavailable: [ProviderStatus] {
-    statuses.filter { $0.report == nil }
+        statuses.filter { enabledProviders.contains($0.kind) && $0.report == nil }
+    }
+
+    public func setProvider(_ kind: ProviderKind, enabled: Bool) {
+        if enabled {
+            enabledProviders.insert(kind)
+        } else if enabledProviders.count > 1 {
+            enabledProviders.remove(kind)
+            if menuBarSource.providerKind == kind { menuBarSource = .highest }
+        }
+        defaults.set(enabledProviders.map(\.rawValue), forKey: Self.enabledProvidersKey)
   }
 
   public var menuBarReadout: MenuBarReadout {
@@ -110,7 +124,8 @@ public final class UsageStore {
   /// server promised a 429 until then, so the refresh button would only burn a
   /// request into a wall and prolong the penalty.
   func fetchesToSkip(force: Bool, now: Date) -> Set<ProviderKind> {
-    var skipped = Set(blockedUntil.filter { now < $0.value }.keys)
+        var skipped = Set(ProviderKind.allCases).subtracting(enabledProviders)
+        skipped.formUnion(blockedUntil.filter { now < $0.value }.keys)
     guard !force else { return skipped }
     for (kind, cached) in cache
     where now.timeIntervalSince(cached.fetchedAt) < Self.minFetchInterval {
@@ -195,6 +210,14 @@ public final class UsageStore {
       )
     }
   }
+
+    private static func loadEnabledProviders(from defaults: UserDefaults) -> Set<ProviderKind> {
+        guard let stored = defaults.stringArray(forKey: enabledProvidersKey) else {
+            return Set(ProviderKind.allCases)
+        }
+        let providers = Set(stored.compactMap(ProviderKind.init(rawValue:)))
+        return providers.isEmpty ? Set(ProviderKind.allCases) : providers
+    }
 
   private static func loadCache(from defaults: UserDefaults) -> [ProviderKind: CachedReport] {
     guard let data = defaults.data(forKey: cacheKey),
