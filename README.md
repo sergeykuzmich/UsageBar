@@ -13,7 +13,7 @@ A macOS menu bar app that shows how much of your Claude Code and Codex usage lim
 curl -fsSL https://raw.githubusercontent.com/lucas-barake/usagebar/main/install.sh | bash
 ```
 
-Run that on any Mac you want it on. It installs to `/Applications` (or `~/Applications` if that is not writable), launches, and works on both Apple silicon and Intel. Requires macOS 14 or newer, plus whichever CLIs you want to see, signed in on that machine.
+Run that on any Apple silicon Mac you want it on. It installs to `/Applications` (or `~/Applications` if that is not writable) and launches. Requires macOS 14 or newer, plus whichever CLIs you want to see, signed in on that machine.
 
 macOS asks once for keychain access the first time it reads Claude's token. Click **Always Allow**.
 
@@ -54,8 +54,10 @@ Nothing is uploaded anywhere else, and there is no config file.
 ## Build from source
 
 ```bash
-./scripts/install-app.sh
+make install
 ```
+
+This builds an arm64 release app, installs it in `/Applications`, and launches it. Run `make help` to see the other development commands for testing, linting, formatting, and building.
 
 `./.build/release/usagebar --render-preview <dir>` writes PNGs of the popover in light and dark, with live and fixture data. That is how the screenshots above are made, and it is the only way to check the UI on a machine without Screen Recording permission.
 
