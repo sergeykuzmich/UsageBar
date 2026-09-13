@@ -47,9 +47,6 @@ public struct AppRelease: Sendable, Equatable {
 }
 
 public enum AppUpdate {
-  public static let latestReleaseEndpoint = URL(
-    string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest"
-  )!
   public static let assetName = "UsageBar.zip"
   /// Unauthenticated GitHub API calls are capped per hour per address, and a menu bar
   /// app has no business asking more often than this anyway.
@@ -98,8 +95,37 @@ public enum AppUpdate {
       version: version, tag: payload.tagName, downloadURL: asset.browserDownloadURL)
   }
 
-  public static func fetchLatest(session: URLSession = .shared) async throws -> AppRelease {
-    var request = URLRequest(url: latestReleaseEndpoint)
+  @available(*, deprecated, message: "Use fetchLatest(repository:session:) instead")
+  public static func fetchLatest(
+    session: URLSession = .shared
+  ) async throws -> AppRelease {
+    return try await fetchLatest(repository: "", session: session)
+  }
+
+  public static func latestReleaseEndpoint(repository: String) -> URL? {
+    let components =
+      repository
+      .split(separator: "/", omittingEmptySubsequences: false)
+    guard components.count == 2, !components[0].isEmpty, !components[1].isEmpty else {
+      return nil
+    }
+
+    var url = URLComponents()
+    url.scheme = "https"
+    url.host = "api.github.com"
+    url.path = "/repos/\(components[0])/\(components[1])/releases/latest"
+    return url.url
+  }
+
+  public static func fetchLatest(
+    repository: String,
+    session: URLSession = .shared
+  ) async throws -> AppRelease {
+    guard let endpoint = latestReleaseEndpoint(repository: repository) else {
+      throw ParseError(message: "Could not determine the update repository.")
+    }
+
+    var request = URLRequest(url: endpoint)
     request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
     request.timeoutInterval = 15
 

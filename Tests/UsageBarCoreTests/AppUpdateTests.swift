@@ -76,4 +76,19 @@ struct AppUpdateTests {
     #expect(SemanticVersion("latest") == nil)
     #expect(SemanticVersion("v") == nil)
   }
+
+  @Test func createsEndpointForCanonicalRepository() {
+    let endpoint = AppUpdate.latestReleaseEndpoint(repository: "sergeykuzmich/UsageBar")
+
+    #expect(
+      endpoint == URL(string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest")
+    )
+  }
+
+  @Test(arguments: [
+    "", "owner", "/owner", "owner/", "owner//repo", "owner/repo/extra", "owner//", "/",
+  ])
+  func rejectsInvalidRepositoryStrings(repository: String) {
+    #expect(AppUpdate.latestReleaseEndpoint(repository: repository) == nil)
+  }
 }
