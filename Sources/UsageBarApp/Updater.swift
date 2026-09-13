@@ -97,10 +97,17 @@ final class Updater {
       [
         "attach", archive.path, "-nobrowse", "-readonly", "-mountpoint", mount.path,
       ])
-    defer { try? run("/usr/bin/hdiutil", ["detach", mount.path]) }
+    var mountAttached = true
+    defer {
+      if mountAttached {
+        try? run("/usr/bin/hdiutil", ["detach", mount.path])
+      }
+    }
     try run(
       "/usr/bin/ditto",
       [mount.appendingPathComponent(bundle.lastPathComponent).path, staged.path])
+    try run("/usr/bin/hdiutil", ["detach", mount.path])
+    mountAttached = false
 
     guard
       FileManager.default.fileExists(atPath: staged.appendingPathComponent("Contents/MacOS").path)
