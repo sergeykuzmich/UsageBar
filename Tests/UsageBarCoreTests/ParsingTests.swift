@@ -399,68 +399,68 @@ struct UsageStoreTests {
   ]
 
   @MainActor
-    @Test func bothProvidersAreEnabledByDefault() {
-        let store = UsageStore(defaults: Self.scratchDefaults(#function))
+  @Test func bothProvidersAreEnabledByDefault() {
+    let store = UsageStore(defaults: Self.scratchDefaults(#function))
 
-        #expect(store.enabledProviders == Set(ProviderKind.allCases))
-    }
+    #expect(store.enabledProviders == Set(ProviderKind.allCases))
+  }
 
-    @MainActor
-    @Test func disabledProvidersAreHiddenAndSkipped() {
-        let store = UsageStore(defaults: Self.scratchDefaults(#function))
-        store.apply(Self.bothProviders)
+  @MainActor
+  @Test func disabledProvidersAreHiddenAndSkipped() {
+    let store = UsageStore(defaults: Self.scratchDefaults(#function))
+    store.apply(Self.bothProviders)
 
-        store.setProvider(.codex, enabled: false)
+    store.setProvider(.codex, enabled: false)
 
-        #expect(store.available.map(\.kind) == [.claude])
-        #expect(store.menuBarReadout == .single(16))
-        #expect(store.fetchesToSkip(force: true, now: Date()).contains(.codex))
-    }
+    #expect(store.available.map(\.kind) == [.claude])
+    #expect(store.menuBarReadout == .single(16))
+    #expect(store.fetchesToSkip(force: true, now: Date()).contains(.codex))
+  }
 
-    @MainActor
-    @Test func reEnablingDoesNotShowAnExpiredReading() {
-        let store = UsageStore(defaults: Self.scratchDefaults(#function))
-        let fetchedAt = Date().addingTimeInterval(-UsageStore.staleLimit - 1)
-        store.apply(Self.bothProviders, now: fetchedAt)
-        store.setProvider(.codex, enabled: false)
+  @MainActor
+  @Test func reEnablingDoesNotShowAnExpiredReading() {
+    let store = UsageStore(defaults: Self.scratchDefaults(#function))
+    let fetchedAt = Date().addingTimeInterval(-UsageStore.staleLimit - 1)
+    store.apply(Self.bothProviders, now: fetchedAt)
+    store.setProvider(.codex, enabled: false)
 
-        store.setProvider(.codex, enabled: true)
+    store.setProvider(.codex, enabled: true)
 
-        #expect(store.available.map(\.kind) == [.claude])
-    }
+    #expect(store.available.map(\.kind) == [.claude])
+  }
 
-    @MainActor
-    @Test func disablingThePinnedProviderFallsBackToHighest() {
-        let store = UsageStore(defaults: Self.scratchDefaults(#function))
-        store.menuBarSource = .codex
+  @MainActor
+  @Test func disablingThePinnedProviderFallsBackToHighest() {
+    let store = UsageStore(defaults: Self.scratchDefaults(#function))
+    store.menuBarSource = .codex
 
-        store.setProvider(.codex, enabled: false)
+    store.setProvider(.codex, enabled: false)
 
-        #expect(store.menuBarSource == .highest)
-    }
+    #expect(store.menuBarSource == .highest)
+  }
 
-    @MainActor
-    @Test func theLastProviderCannotBeDisabled() {
-        let store = UsageStore(defaults: Self.scratchDefaults(#function))
-        store.setProvider(.codex, enabled: false)
+  @MainActor
+  @Test func theLastProviderCannotBeDisabled() {
+    let store = UsageStore(defaults: Self.scratchDefaults(#function))
+    store.setProvider(.codex, enabled: false)
 
-        store.setProvider(.claude, enabled: false)
+    store.setProvider(.claude, enabled: false)
 
-        #expect(store.enabledProviders == [.claude])
-    }
+    #expect(store.enabledProviders == [.claude])
+  }
 
-    @MainActor
-    @Test func enabledProvidersSurviveARestart() {
-        let defaults = Self.scratchDefaults(#function)
-        let first = UsageStore(defaults: defaults)
-        first.setProvider(.codex, enabled: false)
+  @MainActor
+  @Test func enabledProvidersSurviveARestart() {
+    let defaults = Self.scratchDefaults(#function)
+    let first = UsageStore(defaults: defaults)
+    first.setProvider(.codex, enabled: false)
 
-        let relaunched = UsageStore(defaults: defaults)
+    let relaunched = UsageStore(defaults: defaults)
 
-        #expect(relaunched.enabledProviders == [.claude])
-    }
+    #expect(relaunched.enabledProviders == [.claude])
+  }
 
-    @MainActor
+  @MainActor
   @Test func headlineFollowsTheChosenProvider() {
     let store = UsageStore(defaults: Self.scratchDefaults(#function))
     store.apply(Self.bothProviders)
