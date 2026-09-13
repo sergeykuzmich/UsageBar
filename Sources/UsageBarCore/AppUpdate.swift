@@ -48,7 +48,7 @@ public struct AppRelease: Sendable, Equatable {
 
 public enum AppUpdate {
   public static let latestReleaseEndpoint = URL(
-    string: "https://api.github.com/repos/lucas-barake/usagebar/releases/latest"
+    string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest"
   )!
   public static let assetName = "UsageBar.zip"
   /// Unauthenticated GitHub API calls are capped per hour per address, and a menu bar

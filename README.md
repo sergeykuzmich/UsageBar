@@ -10,8 +10,10 @@ A macOS menu bar app that shows how much of your Claude Code and Codex usage lim
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/lucas-barake/usagebar/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/sergeykuzmich/UsageBar/main/install.sh | bash
 ```
+
+See the [latest release](https://github.com/sergeykuzmich/UsageBar/releases/latest) for release notes and the downloadable archive.
 
 Run that on any Apple silicon Mac you want it on. It installs to `/Applications` (or `~/Applications` if that is not writable) and launches. Requires macOS 14 or newer, plus whichever CLIs you want to see, signed in on that machine.
 

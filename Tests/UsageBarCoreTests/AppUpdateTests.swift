@@ -10,7 +10,7 @@ struct AppUpdateTests {
     #"""
     {"tag_name":"v0.7.0","name":"v0.7.0","draft":false,"prerelease":false,
      "assets":[{"name":"UsageBar.zip","size":354117,
-     "browser_download_url":"https://github.com/lucas-barake/usagebar/releases/download/v0.7.0/UsageBar.zip"}]}
+     "browser_download_url":"https://github.com/sergeykuzmich/UsageBar/releases/download/v0.7.0/UsageBar.zip"}]}
     """#.utf8
   )
 
