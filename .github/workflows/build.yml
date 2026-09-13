@@ -7,6 +7,11 @@ on:
         description: Name for the uploaded application artifact
         required: true
         type: string
+      version:
+        description: Version written into the application bundle
+        required: false
+        default: ""
+        type: string
 
 permissions:
   contents: read
@@ -18,7 +23,9 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build arm64 app
-        run: make build
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: make build USAGEBAR_VERSION="${RELEASE_VERSION#v}"
 
       - name: Package app
         run: ditto -c -k --keepParent dist/UsageBar.app dist/UsageBar.zip

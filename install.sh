@@ -1,8 +1,8 @@
 #!/bin/bash
-# curl -fsSL https://raw.githubusercontent.com/lucas-barake/usagebar/main/install.sh | bash
+# curl -fsSL https://raw.githubusercontent.com/sergeykuzmich/UsageBar/main/install.sh | bash
 set -euo pipefail
 
-repo="lucas-barake/usagebar"
+repo="sergeykuzmich/UsageBar"
 asset="https://github.com/$repo/releases/latest/download/UsageBar.zip"
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
