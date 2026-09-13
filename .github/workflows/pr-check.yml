@@ -15,19 +15,19 @@ jobs:
   test:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: swift test
 
   lint:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: swift build -Xswiftc -warnings-as-errors
 
   format:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: swift format lint --strict --recursive Sources Tests Package.swift
 
   build:
