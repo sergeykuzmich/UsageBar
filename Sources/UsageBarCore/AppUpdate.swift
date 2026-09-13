@@ -47,6 +47,14 @@ public struct AppRelease: Sendable, Equatable {
 }
 
 public enum AppUpdate {
+  @available(
+    *, deprecated,
+    message: "Pass an explicit repository to latestReleaseEndpoint(repository:) instead."
+  )
+  public static let latestReleaseEndpoint = URL(
+    string: "https://api.github.com/repos/lucas-barake/usagebar/releases/latest"
+  )!
+
   public static let assetName = "UsageBar.zip"
   /// Unauthenticated GitHub API calls are capped per hour per address, and a menu bar
   /// app has no business asking more often than this anyway.
@@ -175,6 +183,14 @@ public enum AppUpdate {
     url.host = "api.github.com"
     url.path = "/repos/\(components[0])/\(components[1])/releases/latest"
     return url.url
+  }
+
+  @available(
+    *, deprecated,
+    message: "Pass an explicit repository to fetchLatest(repository:session:) instead."
+  )
+  public static func fetchLatest(session: URLSession = .shared) async throws -> AppRelease {
+    try await fetchLatest(repository: "lucas-barake/usagebar", session: session)
   }
 
   public static func fetchLatest(

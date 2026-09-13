@@ -77,6 +77,14 @@ struct AppUpdateTests {
     #expect(SemanticVersion("v") == nil)
   }
 
+  @available(*, deprecated)
+  @Test func legacyEndpointUsesTheHistoricalRepository() {
+    #expect(
+      AppUpdate.latestReleaseEndpoint
+        == URL(string: "https://api.github.com/repos/lucas-barake/usagebar/releases/latest")
+    )
+  }
+
   @Test func createsEndpointForCanonicalRepository() {
     let endpoint = AppUpdate.latestReleaseEndpoint(repository: "sergeykuzmich/UsageBar")
 
