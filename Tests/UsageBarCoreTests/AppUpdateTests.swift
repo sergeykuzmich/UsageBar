@@ -9,8 +9,8 @@ struct AppUpdateTests {
   static let payload = Data(
     #"""
     {"tag_name":"v0.7.0","name":"v0.7.0","draft":false,"prerelease":false,
-     "assets":[{"name":"UsageBar.zip","size":354117,
-     "browser_download_url":"https://github.com/sergeykuzmich/UsageBar/releases/download/v0.7.0/UsageBar.zip"}]}
+     "assets":[{"name":"UsageBar.dmg","size":354117,
+     "browser_download_url":"https://github.com/sergeykuzmich/UsageBar/releases/download/v0.7.0/UsageBar.dmg"}]}
     """#.utf8
   )
 
@@ -19,7 +19,7 @@ struct AppUpdateTests {
 
     #expect(release.tag == "v0.7.0")
     #expect(release.version == SemanticVersion("0.7.0"))
-    #expect(release.downloadURL.lastPathComponent == "UsageBar.zip")
+    #expect(release.downloadURL.lastPathComponent == "UsageBar.dmg")
   }
 
   @Test func rejectsAReleaseWithoutTheAppArchive() {
@@ -35,7 +35,7 @@ struct AppUpdateTests {
 
   @Test func rejectsATagThatIsNotAVersion() {
     let payload = Data(
-      #"{"tag_name":"nightly","assets":[{"name":"UsageBar.zip","browser_download_url":"https://x/y"}]}"#
+      #"{"tag_name":"nightly","assets":[{"name":"UsageBar.dmg","browser_download_url":"https://x/y"}]}"#
         .utf8
     )
 

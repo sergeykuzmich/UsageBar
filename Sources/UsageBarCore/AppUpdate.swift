@@ -55,7 +55,7 @@ public enum AppUpdate {
     string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest"
   )!
 
-  public static let assetName = "UsageBar.zip"
+  public static let assetName = "UsageBar.dmg"
   /// Unauthenticated GitHub API calls are capped per hour per address, and a menu bar
   /// app has no business asking more often than this anyway.
   public static let checkInterval: TimeInterval = 6 * 3600
