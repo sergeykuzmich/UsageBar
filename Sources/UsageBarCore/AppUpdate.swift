@@ -52,7 +52,7 @@ public enum AppUpdate {
     message: "Pass an explicit repository to latestReleaseEndpoint(repository:) instead."
   )
   public static let latestReleaseEndpoint = URL(
-    string: "https://api.github.com/repos/lucas-barake/usagebar/releases/latest"
+    string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest"
   )!
 
   public static let assetName = "UsageBar.zip"

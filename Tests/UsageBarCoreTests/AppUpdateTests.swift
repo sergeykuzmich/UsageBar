@@ -78,10 +78,10 @@ struct AppUpdateTests {
   }
 
   @available(*, deprecated)
-  @Test func legacyEndpointUsesTheHistoricalRepository() {
+  @Test func legacyEndpointUsesTheCurrentRepository() {
     #expect(
       AppUpdate.latestReleaseEndpoint
-        == URL(string: "https://api.github.com/repos/lucas-barake/usagebar/releases/latest")
+        == URL(string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest")
     )
   }
 
