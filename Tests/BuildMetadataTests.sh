@@ -46,6 +46,14 @@ assert_no_repository() {
   assert_repository "$origin" ""
 }
 
+actual_identifier="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' \
+  "$root/Support/Info.plist")"
+if [[ "$actual_identifier" != "jdg.kuzmich.usagebar" ]]; then
+  printf 'expected bundle identifier %q, got %q\n' \
+    "jdg.kuzmich.usagebar" "$actual_identifier" >&2
+  exit 1
+fi
+
 assert_repository "https://github.com/github/.github.git" "github/.github"
 assert_repository "git@github.com:github/.github.git" "github/.github"
 assert_repository "https://github.com/981011512/--.git" "981011512/--"

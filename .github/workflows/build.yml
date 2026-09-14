@@ -115,6 +115,15 @@ jobs:
             -format UDZO \
             dist/UsageBar.dmg
 
+      - name: Sign release DMG
+        if: inputs.notarize
+        env:
+          DEVELOPER_ID_APPLICATION_IDENTITY: ${{ secrets.DEVELOPER_ID_APPLICATION_IDENTITY }}
+        run: |
+          set -euo pipefail
+          codesign --sign "$DEVELOPER_ID_APPLICATION_IDENTITY" --timestamp dist/UsageBar.dmg
+          codesign --verify --verbose=2 dist/UsageBar.dmg
+
       - name: Notarize DMG
         if: inputs.notarize
         env:
