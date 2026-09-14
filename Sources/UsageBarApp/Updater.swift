@@ -89,10 +89,26 @@ final class Updater {
     }
     try FileManager.default.moveItem(at: downloaded, to: archive)
 
-    let unpacked = work.appendingPathComponent("unpacked")
-    try run("/usr/bin/ditto", ["-x", "-k", archive.path, unpacked.path])
+    let mount = work.appendingPathComponent("mount")
+    let staged = work.appendingPathComponent(bundle.lastPathComponent)
+    try FileManager.default.createDirectory(at: mount, withIntermediateDirectories: true)
+    try run(
+      "/usr/bin/hdiutil",
+      [
+        "attach", archive.path, "-nobrowse", "-readonly", "-mountpoint", mount.path,
+      ])
+    var mountAttached = true
+    defer {
+      if mountAttached {
+        try? run("/usr/bin/hdiutil", ["detach", mount.path])
+      }
+    }
+    try run(
+      "/usr/bin/ditto",
+      [mount.appendingPathComponent(bundle.lastPathComponent).path, staged.path])
+    try run("/usr/bin/hdiutil", ["detach", mount.path])
+    mountAttached = false
 
-    let staged = unpacked.appendingPathComponent(bundle.lastPathComponent)
     guard
       FileManager.default.fileExists(atPath: staged.appendingPathComponent("Contents/MacOS").path)
     else {
@@ -108,7 +124,6 @@ final class Updater {
       while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done
       rm -rf '\(bundle.path)'
       /usr/bin/ditto '\(staged.path)' '\(bundle.path)'
-      /usr/bin/xattr -dr com.apple.quarantine '\(bundle.path)' 2>/dev/null
       rm -rf '\(work.path)'
       /usr/bin/open '\(bundle.path)'
       """

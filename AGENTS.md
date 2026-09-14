@@ -59,9 +59,9 @@ Pull requests run `.github/workflows/pr-check.yml` on `macos-latest`:
 3. `make format-check`
 4. the reusable `.github/workflows/build.yml` workflow
 
-The build workflow creates the arm64 app, packages it as `dist/UsageBar.zip` with `ditto`, and uploads a seven-day artifact. New commits cancel obsolete runs for the same pull request. For same-repository pull requests not opened by Dependabot, the workflow creates or updates one marker-based comment linking to the latest run's artifacts.
+The reusable build workflow creates the arm64 app, packages it as `dist/UsageBar.dmg` with `hdiutil`, and uploads a seven-day artifact. New commits cancel obsolete runs for the same pull request. For same-repository pull requests not opened by Dependabot, the PR workflow creates or updates one marker-based comment linking to the latest run's artifacts.
 
-Dependabot checks GitHub Actions dependencies monthly. No deployment or release workflow is currently checked into this repository; do not describe the reusable build workflow as a release pipeline.
+Dependabot checks GitHub Actions dependencies monthly. The release workflow invokes the reusable build workflow with Developer ID signing and Apple notarization enabled, then attaches `UsageBar.dmg` to each published GitHub release.
 
 ## Validation
 

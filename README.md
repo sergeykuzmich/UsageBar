@@ -9,21 +9,15 @@ A macOS menu bar app that shows how much of your Claude Code and Codex usage lim
 
 ## Install
 
+The install script is the fastest option:
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/sergeykuzmich/UsageBar/main/install.sh | bash
 ```
 
-See the [latest release](https://github.com/sergeykuzmich/UsageBar/releases/latest) for release notes and the downloadable archive.
+It installs to `/Applications` (or `~/Applications` if that is not writable) and launches. Browser users can instead download `UsageBar.dmg` from the [latest release](https://github.com/sergeykuzmich/UsageBar/releases/latest), open it, and copy `UsageBar.app` to Applications normally. Published releases are signed with Developer ID and notarized by Apple.
 
-Run that on any Apple silicon Mac you want it on. It installs to `/Applications` (or `~/Applications` if that is not writable) and launches. Requires macOS 14 or newer, plus whichever CLIs you want to see, signed in on that machine.
-
-macOS asks once for keychain access the first time it reads Claude's token. Click **Always Allow**.
-
-**Use the script, not the browser.** The app is ad-hoc signed and not notarized, so `spctl` rejects it. The script works because `curl` does not attach a quarantine flag, and Gatekeeper only blocks quarantined apps. If you download `UsageBar.zip` from the releases page in a browser instead, macOS will refuse to open it, and you would have to clear the flag by hand:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/UsageBar.app
-```
+UsageBar requires macOS 14 or newer on Apple silicon, plus whichever CLIs you want to see, signed in on that machine. macOS asks once for keychain access the first time it reads Claude's token; click **Always Allow**.
 
 ## Updating
 
@@ -59,7 +53,7 @@ Nothing is uploaded anywhere else, and there is no config file.
 make install
 ```
 
-This builds an arm64 release app, installs it in `/Applications`, and launches it. Run `make help` to see the other development commands for testing, linting, formatting, and building.
+This builds an arm64 release app, installs it in `/Applications`, and launches it. Run `make help` to see the other development commands for testing, linting, formatting, and building. Local `make build` app bundles are ad-hoc signed; Developer ID signing and Apple notarization happen only in the published-release workflow.
 
 `./.build/release/usagebar --render-preview <dir>` writes PNGs of the popover in light and dark, with live and fixture data. That is how the screenshots above are made, and it is the only way to check the UI on a machine without Screen Recording permission.
 
