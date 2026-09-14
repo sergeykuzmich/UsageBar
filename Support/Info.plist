@@ -7,7 +7,7 @@
 	<key>CFBundleExecutable</key>
 	<string>usagebar</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.lucasbarake.usagebar</string>
+	<string>jdg.kuzmich.usagebar</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
