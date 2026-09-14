@@ -47,9 +47,14 @@ public struct AppRelease: Sendable, Equatable {
 }
 
 public enum AppUpdate {
+  @available(
+    *, deprecated,
+    message: "Pass an explicit repository to latestReleaseEndpoint(repository:) instead."
+  )
   public static let latestReleaseEndpoint = URL(
     string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest"
   )!
+
   public static let assetName = "UsageBar.zip"
   /// Unauthenticated GitHub API calls are capped per hour per address, and a menu bar
   /// app has no business asking more often than this anyway.
@@ -65,6 +70,66 @@ public enum AppUpdate {
     public var errorDescription: String? { message }
   }
 
+  private static let maxOwnerLength = 39
+  private static let maxRepositoryLength = 100
+
+  private static func isASCIIAlphanumeric(_ character: Character) -> Bool {
+    guard
+      character.unicodeScalars.count == 1,
+      let scalar = character.unicodeScalars.first,
+      scalar.value < 128
+    else {
+      return false
+    }
+
+    return CharacterSet.alphanumerics.contains(scalar)
+  }
+
+  private static func isCanonicalOwner(_ value: Substring) -> Bool {
+    guard !value.isEmpty, value.count <= maxOwnerLength else { return false }
+    guard
+      let first = value.first,
+      let last = value.last,
+      isASCIIAlphanumeric(first),
+      isASCIIAlphanumeric(last)
+    else {
+      return false
+    }
+
+    var previousCharacterWasSeparator = false
+    for character in value {
+      if isASCIIAlphanumeric(character) {
+        previousCharacterWasSeparator = false
+        continue
+      }
+
+      if character == "-" {
+        if previousCharacterWasSeparator { return false }
+        previousCharacterWasSeparator = true
+        continue
+      }
+
+      return false
+    }
+
+    return true
+  }
+
+  private static func isCanonicalRepository(_ value: Substring) -> Bool {
+    guard
+      !value.isEmpty,
+      value.count <= maxRepositoryLength,
+      value != ".",
+      value != ".."
+    else {
+      return false
+    }
+
+    return value.allSatisfy {
+      isASCIIAlphanumeric($0) || $0 == "-" || $0 == "_" || $0 == "."
+    }
+  }
+
   private struct Payload: Decodable {
     struct Asset: Decodable {
       let name: String
@@ -75,6 +140,7 @@ public enum AppUpdate {
         case browserDownloadURL = "browser_download_url"
       }
     }
+
     let tagName: String
     let assets: [Asset]
 
@@ -95,11 +161,47 @@ public enum AppUpdate {
       throw ParseError(message: "Release \(payload.tagName) has no \(assetName).")
     }
     return AppRelease(
-      version: version, tag: payload.tagName, downloadURL: asset.browserDownloadURL)
+      version: version,
+      tag: payload.tagName,
+      downloadURL: asset.browserDownloadURL
+    )
   }
 
+  public static func latestReleaseEndpoint(repository: String) -> URL? {
+    let components = repository.split(separator: "/", omittingEmptySubsequences: false)
+
+    guard
+      components.count == 2,
+      isCanonicalOwner(components[0]),
+      isCanonicalRepository(components[1])
+    else {
+      return nil
+    }
+
+    var url = URLComponents()
+    url.scheme = "https"
+    url.host = "api.github.com"
+    url.path = "/repos/\(components[0])/\(components[1])/releases/latest"
+    return url.url
+  }
+
+  @available(
+    *, deprecated,
+    message: "Pass an explicit repository to fetchLatest(repository:session:) instead."
+  )
   public static func fetchLatest(session: URLSession = .shared) async throws -> AppRelease {
-    var request = URLRequest(url: latestReleaseEndpoint)
+    try await fetchLatest(repository: "lucas-barake/usagebar", session: session)
+  }
+
+  public static func fetchLatest(
+    repository: String,
+    session: URLSession = .shared
+  ) async throws -> AppRelease {
+    guard let endpoint = latestReleaseEndpoint(repository: repository) else {
+      throw ParseError(message: "Could not determine the update repository.")
+    }
+
+    var request = URLRequest(url: endpoint)
     request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
     request.timeoutInterval = 15
 

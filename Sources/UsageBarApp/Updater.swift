@@ -13,6 +13,13 @@ final class Updater {
 
   private var checkTask: Task<Void, Never>?
 
+  private var repository: String? {
+    guard let repository = Bundle.main.usageBarUpdateRepository, !repository.isEmpty else {
+      return nil
+    }
+    return repository
+  }
+
   var currentVersion: SemanticVersion {
     SemanticVersion(
       Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")
@@ -20,6 +27,14 @@ final class Updater {
   }
 
   func startChecking() {
+    guard repository != nil else {
+      checkTask?.cancel()
+      checkTask = nil
+      available = nil
+      failure = nil
+      return
+    }
+
     checkTask?.cancel()
     checkTask = Task { [weak self] in
       while !Task.isCancelled {
@@ -30,8 +45,14 @@ final class Updater {
   }
 
   func check() async {
+    guard let repository else {
+      available = nil
+      failure = nil
+      return
+    }
+
     do {
-      let latest = try await AppUpdate.fetchLatest()
+      let latest = try await AppUpdate.fetchLatest(repository: repository)
       available = latest.version > currentVersion ? latest : nil
       failure = nil
     } catch {

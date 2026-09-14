@@ -76,4 +76,47 @@ struct AppUpdateTests {
     #expect(SemanticVersion("latest") == nil)
     #expect(SemanticVersion("v") == nil)
   }
+
+  @available(*, deprecated)
+  @Test func legacyEndpointUsesTheCurrentRepository() {
+    #expect(
+      AppUpdate.latestReleaseEndpoint
+        == URL(string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest")
+    )
+  }
+
+  @Test func createsEndpointForCanonicalRepository() {
+    let endpoint = AppUpdate.latestReleaseEndpoint(repository: "sergeykuzmich/UsageBar")
+
+    #expect(
+      endpoint == URL(string: "https://api.github.com/repos/sergeykuzmich/UsageBar/releases/latest")
+    )
+  }
+
+  @Test(arguments: [
+    "", "owner", "/owner", "owner/", "owner//repo", "owner/repo/extra", "owner//", "/",
+    " owner/repo", "owner /repo", "owner/repo ", "-owner/repo", "owner/repo?x=y",
+    "owner/repo#fragment", "owner/re/po", "owner/.", "owner/..", "owner/../repo",
+    "owner//../po",
+  ])
+  func rejectsInvalidRepositoryStrings(repository: String) {
+    #expect(AppUpdate.latestReleaseEndpoint(repository: repository) == nil)
+  }
+
+  @Test(arguments: [
+    "github/.github", "981011512/--", "owner/foo--bar", "owner/foo..bar", "owner/repo-",
+    "owner/repo_",
+  ])
+  func acceptsGitHubRepositoryNamesInAnyPlacement(repository: String) {
+    let endpoint = AppUpdate.latestReleaseEndpoint(repository: repository)
+
+    #expect(endpoint?.path == "/repos/\(repository)/releases/latest")
+  }
+
+  @Test func acceptsGitHubLikeCanonicalRepository() {
+    #expect(
+      AppUpdate.latestReleaseEndpoint(repository: "or-gane/UsageBar-01")
+        == URL(string: "https://api.github.com/repos/or-gane/UsageBar-01/releases/latest")
+    )
+  }
 }
